@@ -15,5 +15,18 @@ namespace Kusto.Mirror.ConsoleApp
 
         [Option('c', "cluster", Required = false, HelpText = "Cluster Query URL")]
         public string ClusterQueryUrl { get; set; } = string.Empty;
+
+        [Option("db", Required = false, HelpText = "Kusto Database")]
+        public string Database { get; set; } = string.Empty;
+
+        [Option('t', "table", Required = false, HelpText = "Kusto Table")]
+        public string KustoTable { get; set; } = string.Empty;
+
+        [Option(
+            'p',
+            "partition",
+            Required = false,
+            HelpText = "Ingest Partition Columns (true / false)")]
+        public bool IngestPartitionColumns { get; set; } = true;
     }
 }

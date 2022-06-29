@@ -48,9 +48,9 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
 
             var deltaTable = new DeltaTableParameterization(
                 deltaTableUrl,
-                "Database not set",
-                "Kusto table not set",
-                true);
+                options.Database,
+                options.KustoTable,
+                options.IngestPartitionColumns);
 
             return new MainParameterization(
                 options.AuthenticationMode,
