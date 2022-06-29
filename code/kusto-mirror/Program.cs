@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using CommandLine.Text;
+using Kusto.Mirror.ConsoleApp.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -168,7 +169,13 @@ namespace Kusto.Mirror.ConsoleApp
             Trace.WriteLine("");
             Trace.WriteLine("Initialization...");
 
-            await Task.CompletedTask;
+            var parameters = MainParameterization.Create(options);
+
+            await using (var orchestration =
+                await MirrorOrchestration.CreationOrchestrationAsync(parameters))
+            {
+                await orchestration.RunAsync();
+            }
         }
 
         private static void ConfigureTrace(bool isVerbose)
