@@ -1,4 +1,4 @@
-﻿namespace Kusto.Mirror.Database
+﻿namespace Kusto.Mirror.ConsoleApp.Database
 {
     public class DatabaseGateway
     {

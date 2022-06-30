@@ -21,10 +21,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
+		<PackageReference Include="Microsoft.Azure.Kusto.Data" Version="10.0.3" />
+		<PackageReference Include="Microsoft.Azure.Kusto.Ingest" Version="10.0.3" />
 		<PackageReference Include="YamlDotNet" Version="11.2.1" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Kusto.Mirror.Database\Kusto.Mirror.Database.csproj" />
+	  <Folder Include="Database\" />
 	</ItemGroup>
 </Project>

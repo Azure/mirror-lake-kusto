@@ -1,5 +1,5 @@
-﻿using Kusto.Mirror.ConsoleApp.Parameters;
-using Kusto.Mirror.Database;
+﻿using Kusto.Mirror.ConsoleApp.Database;
+using Kusto.Mirror.ConsoleApp.Parameters;
 using System.Collections.Immutable;
 
 namespace Kusto.Mirror.ConsoleApp
@@ -17,8 +17,9 @@ namespace Kusto.Mirror.ConsoleApp
             string? requestDescription,
             CancellationToken ct)
         {
-            var clusterGateway = new KustoClusterGateway(
-                parameters.ClusterQueryUri,
+            var clusterGateway = await KustoClusterGateway.CreateAsync(
+                parameters.AuthenticationMode,
+                parameters.ClusterIngestionUri,
                 version,
                 requestDescription);
             var databaseManagers = parameters

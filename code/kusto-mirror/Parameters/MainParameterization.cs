@@ -15,7 +15,7 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
             IEnumerable<DeltaTableParameterization> deltaTableParameterizations)
         {
             AuthenticationMode = authenticationMode;
-            ClusterQueryUri = clusterQueryUri;
+            ClusterIngestionUri = clusterQueryUri;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
         }
 
@@ -23,19 +23,19 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
         {
             Uri? clusterQueryUri;
 
-            if (Uri.TryCreate(options.ClusterQueryUrl, UriKind.Absolute, out clusterQueryUri))
+            if (Uri.TryCreate(options.ClusterIngestionUrl, UriKind.Absolute, out clusterQueryUri))
             {
                 if (!string.IsNullOrWhiteSpace(clusterQueryUri.Query))
                 {
                     throw new MirrorException(
                         $"Cluster query URL can't contain query string:  "
-                        + $"'{options.ClusterQueryUrl}'");
+                        + $"'{options.ClusterIngestionUrl}'");
                 }
             }
             else
             {
                 throw new MirrorException(
-                    $"Invalid cluster query URL:  '{options.ClusterQueryUrl}'");
+                    $"Invalid cluster query URL:  '{options.ClusterIngestionUrl}'");
             }
 
             Uri? deltaTableUrl;
@@ -60,7 +60,7 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
 
         public AuthenticationMode AuthenticationMode { get; }
 
-        public Uri ClusterQueryUri { get; }
+        public Uri ClusterIngestionUri { get; }
 
         public IImmutableList<DeltaTableParameterization> DeltaTableParameterizations { get; }
     }

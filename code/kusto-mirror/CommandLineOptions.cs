@@ -13,8 +13,8 @@ namespace Kusto.Mirror.ConsoleApp
         [Option('d', "delta", Required = false, HelpText = "Delta Table URL")]
         public string DeltaTableUrl { get; set; } = string.Empty;
 
-        [Option('c', "cluster", Required = false, HelpText = "Cluster Query URL")]
-        public string ClusterQueryUrl { get; set; } = string.Empty;
+        [Option('i', "ingestion", Required = false, HelpText = "Cluster Ingestion URL")]
+        public string ClusterIngestionUrl { get; set; } = string.Empty;
 
         [Option("db", Required = false, HelpText = "Kusto Database")]
         public string Database { get; set; } = string.Empty;
