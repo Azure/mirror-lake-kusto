@@ -9,6 +9,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Kusto.Mirror.ConsoleApp
@@ -170,11 +171,63 @@ namespace Kusto.Mirror.ConsoleApp
             Trace.WriteLine("Initialization...");
 
             var parameters = MainParameterization.Create(options);
+            var requestDescription = CreateRequestDescription(parameters, sessionId);
+            var cancellationTokenSource = new CancellationTokenSource();
+            var taskCompletionSource = new TaskCompletionSource();
 
-            await using (var orchestration =
-                await MirrorOrchestration.CreationOrchestrationAsync(parameters))
+            AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
-                await orchestration.RunAsync();
+                cancellationTokenSource.Cancel();
+                taskCompletionSource.Task.Wait();
+            };
+
+            try
+            {
+                await using (var orchestration = await MirrorOrchestration.CreationOrchestrationAsync(
+                    parameters,
+                    AssemblyVersion,
+                    requestDescription,
+                    cancellationTokenSource.Token))
+                {
+                    await orchestration.RunAsync(cancellationTokenSource.Token);
+                }
+
+            }
+            finally
+            {
+                taskCompletionSource.SetResult();
+            }
+        }
+
+        private static string? CreateRequestDescription(
+            MainParameterization parameters,
+            string sessionId)
+        {
+            if (Environment.GetEnvironmentVariable("kusto-mirror-automated-tests") != "true")
+            {
+                var authenticationMode = parameters.AuthenticationMode.ToString();
+                var description = new RequestDescription
+                {
+                    SessionId = sessionId,
+                    Os = Environment.OSVersion.Platform.ToString(),
+                    OsVersion = Environment.OSVersion.VersionString,
+                    AuthenticationMode = authenticationMode,
+                    Tables = parameters.DeltaTableParameterizations.Select(j => new RequestDescriptionTable
+                    {
+                        IngestPartitionColumns = j.IngestPartitionColumns
+                    }).ToList()
+                };
+                var buffer = JsonSerializer.SerializeToUtf8Bytes(
+                    description,
+                    typeof(RequestDescription),
+                    new RequestDescriptionSerializerContext());
+                var jsonDescription = UTF8Encoding.ASCII.GetString(buffer);
+
+                return jsonDescription;
+            }
+            else
+            {
+                return null;
             }
         }
 
