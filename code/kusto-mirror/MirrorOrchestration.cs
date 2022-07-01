@@ -1,6 +1,7 @@
 ﻿using Kusto.Mirror.ConsoleApp.Database;
 using Kusto.Mirror.ConsoleApp.Parameters;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace Kusto.Mirror.ConsoleApp
 {
@@ -17,24 +18,27 @@ namespace Kusto.Mirror.ConsoleApp
             string? requestDescription,
             CancellationToken ct)
         {
+            Trace.WriteLine("Initialize Kusto Cluster connections...");
+
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.AuthenticationMode,
                 parameters.ClusterIngestionUri,
                 version,
                 requestDescription);
-            var databaseManagers = parameters
+            var databaseGateways = parameters
                 .DeltaTableParameterizations
                 .Select(p => p.Database)
                 .Distinct()
                 .Select(db => new DatabaseGateway(clusterGateway, db))
                 .ToImmutableArray();
 
-            foreach(var db in databaseManagers)
+            foreach (var db in databaseGateways)
             {
+                Trace.WriteLine($"Initialize Database '{db.DatabaseName}' schemas...");
                 await db.CreateMergeDatabaseObjectsAsync(ct);
             }
 
-            throw new NotImplementedException();
+            return new MirrorOrchestration();
         }
 
         internal Task RunAsync(CancellationToken ct)

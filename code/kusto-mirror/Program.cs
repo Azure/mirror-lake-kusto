@@ -177,6 +177,7 @@ namespace Kusto.Mirror.ConsoleApp
 
             AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
+                Trace.WriteLine("Exiting process...");
                 cancellationTokenSource.Cancel();
                 taskCompletionSource.Task.Wait();
             };
@@ -189,6 +190,8 @@ namespace Kusto.Mirror.ConsoleApp
                     requestDescription,
                     cancellationTokenSource.Token))
                 {
+                    Trace.WriteLine("Starting loop");
+
                     await orchestration.RunAsync(cancellationTokenSource.Token);
                 }
 
