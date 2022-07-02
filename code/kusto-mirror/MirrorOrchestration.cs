@@ -25,22 +25,26 @@ namespace Kusto.Mirror.ConsoleApp
                 parameters.ClusterIngestionUri,
                 version,
                 requestDescription);
-            var databaseGateways = parameters
+            var databaseGroups = parameters
                 .DeltaTableParameterizations
-                .Select(p => p.Database)
-                .Distinct()
-                .Select(db => new DatabaseGateway(clusterGateway, db))
+                .GroupBy(p => p.Database)
+                .Select(g => new
+                {
+                    Gateway = new DatabaseGateway(clusterGateway, g.Key),
+                    Tables = g
+                })
                 .ToImmutableArray();
-            var statusTables = new List<StatusTable>(databaseGateways.Length);
+            //var statusTables = new List<StatusTable>(databaseGroups.Length);
 
-            foreach (var db in databaseGateways)
+            foreach (var db in databaseGroups)
             {
-                Trace.WriteLine($"Initialize Database '{db.DatabaseName}' schemas...");
-                await db.CreateMergeDatabaseObjectsAsync(ct);
-                Trace.WriteLine($"Read Database '{db.DatabaseName}' status...");
-                var statusTable = await StatusTable.LoadStatusTableAsync(db);
+                Trace.WriteLine($"Initialize Database '{db.Gateway.DatabaseName}' schemas...");
+                await db.Gateway.CreateMergeDatabaseObjectsAsync(ct);
+                Trace.WriteLine($"Read Database '{db.Gateway.DatabaseName}' status...");
 
-                statusTables.Add(statusTable);
+                var tableNames = db.Tables.Select(t => t.KustoTable);
+                var statusTables =
+                    await TableStatus.LoadStatusTableAsync(db.Gateway, tableNames, ct);
             }
 
             return new MirrorOrchestration();

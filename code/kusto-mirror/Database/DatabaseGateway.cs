@@ -1,4 +1,7 @@
-﻿namespace Kusto.Mirror.ConsoleApp.Database
+﻿using System.Collections.Immutable;
+using System.Data;
+
+namespace Kusto.Mirror.ConsoleApp.Database
 {
     public class DatabaseGateway
     {
@@ -12,12 +15,36 @@
 
         public string DatabaseName { get; }
 
+        public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
+            string queryText,
+            Func<IDataRecord, T> projection,
+            CancellationToken ct)
+        {
+            return await _clusterGateway.ExecuteQueryAsync(
+                DatabaseName,
+                queryText,
+                projection,
+                ct);
+        }
+
+        public async Task<IImmutableList<T>> ExecuteCommandAsync<T>(
+            string commandText,
+            Func<IDataRecord, T> projection,
+            CancellationToken ct)
+        {
+            return await _clusterGateway.ExecuteCommandAsync(
+                DatabaseName,
+                commandText,
+                projection,
+                ct);
+        }
+
         public async Task CreateMergeDatabaseObjectsAsync(CancellationToken ct)
         {
-            await _clusterGateway.ExecuteCommandAsync(
-                DatabaseName,
-                ".create-merge table KM_DeltaTables(TableName:string, TxId:int, "
+            await ExecuteCommandAsync(
+                $".create-merge table {TableStatus.StatusTableName}(TableName:string, TxId:int, "
                 + "BlobPath:string, Action:string, Status:string)",
+                r => 0,
                 ct);
         }
     }

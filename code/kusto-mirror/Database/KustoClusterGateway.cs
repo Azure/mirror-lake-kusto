@@ -67,12 +67,36 @@ namespace Kusto.Mirror.ConsoleApp.Database
             }
         }
 
-        public async Task<IDataReader> ExecuteCommandAsync(
+        public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
             string database,
-            string commandText,
+            string queryText,
+            Func<IDataRecord, T> projection,
             CancellationToken ct)
         {
-            var reader = await _commandProvider.ExecuteControlCommandAsync(
+            using (var reader = await _queryProvider.ExecuteQueryAsync(
+                database,
+                queryText,
+                _requestOptions != null
+                ? new ClientRequestProperties(_requestOptions, null)
+                {
+                    Application = _application
+                }
+                : null))
+            {
+                var output = Project(reader, projection)
+                    .ToImmutableArray();
+
+                return output;
+            }
+        }
+
+        public async Task<IImmutableList<T>> ExecuteCommandAsync<T>(
+            string database,
+            string commandText,
+            Func<IDataRecord, T> projection,
+            CancellationToken ct)
+        {
+            using(var reader = await _commandProvider.ExecuteControlCommandAsync(
                 database,
                 commandText,
                 _requestOptions != null
@@ -80,9 +104,13 @@ namespace Kusto.Mirror.ConsoleApp.Database
                 {
                     Application = _application
                 }
-                : null);
+                : null))
+            {
+                var output = Project(reader, projection)
+                    .ToImmutableArray();
 
-            return reader;
+                return output;
+            }
         }
 
         private static KustoConnectionStringBuilder CreateKustoConnectionStringBuilder(
