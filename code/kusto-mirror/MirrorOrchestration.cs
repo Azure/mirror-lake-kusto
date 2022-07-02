@@ -1,5 +1,6 @@
 ﻿using Kusto.Mirror.ConsoleApp.Database;
 using Kusto.Mirror.ConsoleApp.Parameters;
+using Kusto.Mirror.ConsoleApp.Storage.DeltaTable;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
@@ -7,6 +8,13 @@ namespace Kusto.Mirror.ConsoleApp
 {
     internal class MirrorOrchestration : IAsyncDisposable
     {
+        private readonly IImmutableList<DeltaTableOrchestration> _orchestrations;
+
+        public MirrorOrchestration(IEnumerable<DeltaTableOrchestration> orchestrations)
+        {
+            _orchestrations = orchestrations.ToImmutableArray();
+        }
+
         ValueTask IAsyncDisposable.DisposeAsync()
         {
             return ValueTask.CompletedTask;
@@ -34,7 +42,7 @@ namespace Kusto.Mirror.ConsoleApp
                     Tables = g
                 })
                 .ToImmutableArray();
-            //var statusTables = new List<StatusTable>(databaseGroups.Length);
+            var orchestrations = new List<DeltaTableOrchestration>();
 
             foreach (var db in databaseGroups)
             {
@@ -43,16 +51,27 @@ namespace Kusto.Mirror.ConsoleApp
                 Trace.WriteLine($"Read Database '{db.Gateway.DatabaseName}' status...");
 
                 var tableNames = db.Tables.Select(t => t.KustoTable);
+                var tableParameterizationMap = db.Tables.ToImmutableDictionary(
+                    t => t.KustoTable);
                 var statusTables =
                     await TableStatus.LoadStatusTableAsync(db.Gateway, tableNames, ct);
+                var tableOrchestrations = statusTables
+                    .Select(t => new DeltaTableOrchestration(
+                        t,
+                        new DeltaTableGateway(
+                            tableParameterizationMap[t.TableName].DeltaTableStorageUrl)));
+
+                orchestrations.AddRange(tableOrchestrations);
             }
 
-            return new MirrorOrchestration();
+            return new MirrorOrchestration(orchestrations);
         }
 
-        internal Task RunAsync(CancellationToken ct)
+        internal async Task RunAsync(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var orchestrationTasks = _orchestrations.Select(o => o.RunAsync(ct));
+
+            await Task.WhenAll(orchestrationTasks);
         }
     }
 }
