@@ -31,11 +31,16 @@ namespace Kusto.Mirror.ConsoleApp
                 .Distinct()
                 .Select(db => new DatabaseGateway(clusterGateway, db))
                 .ToImmutableArray();
+            var statusTables = new List<StatusTable>(databaseGateways.Length);
 
             foreach (var db in databaseGateways)
             {
                 Trace.WriteLine($"Initialize Database '{db.DatabaseName}' schemas...");
                 await db.CreateMergeDatabaseObjectsAsync(ct);
+                Trace.WriteLine($"Read Database '{db.DatabaseName}' status...");
+                var statusTable = await StatusTable.LoadStatusTableAsync(db);
+
+                statusTables.Add(statusTable);
             }
 
             return new MirrorOrchestration();
