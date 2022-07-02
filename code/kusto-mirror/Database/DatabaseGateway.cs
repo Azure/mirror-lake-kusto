@@ -42,8 +42,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
         public async Task CreateMergeDatabaseObjectsAsync(CancellationToken ct)
         {
             await ExecuteCommandAsync(
-                $".create-merge table {TableStatus.StatusTableName}(TableName:string, TxId:int, "
-                + "BlobPath:string, Action:string, Status:string)",
+                TableStatus.CreateStatusTableCommandText,
                 r => 0,
                 ct);
         }

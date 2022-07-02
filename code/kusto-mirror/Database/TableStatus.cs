@@ -11,6 +11,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
 {
     internal class TableStatus
     {
+        private const string STATUS_TABLE_NAME = "KM_DeltaStatus";
         private readonly DatabaseGateway _database;
 
         public static async Task<IImmutableList<TableStatus>> LoadStatusTableAsync(
@@ -19,7 +20,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
             CancellationToken ct)
         {
             var tableNameList = string.Join(", ", tables.Select(t => $"\"{t}\""));
-            var query = $@"{StatusTableName}
+            var query = $@"{STATUS_TABLE_NAME}
 | extend IngestionTime=ingestion_time()
 | where TableName in ({tableNameList})";
             var blobStatuses = await database.ExecuteQueryAsync(
@@ -27,7 +28,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
                 r => DeserializeBlobStatus(r),
                 ct);
             var redundantStatuses = blobStatuses
-                .GroupBy(b => $"{b.TableName}-{b.TxId}-{b.BlobPath}")
+                .GroupBy(b => $"{b.TableName}-{b.StartTxId}-{b.BlobPath}")
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Take(g.Count() - 1))
                 .SelectMany(b => b)
@@ -61,15 +62,19 @@ namespace Kusto.Mirror.ConsoleApp.Database
             TableName = tableName;
         }
 
-        public static string StatusTableName => "KM_DeltaStatus";
-
         public string TableName { get; }
+
+        internal static string CreateStatusTableCommandText =>
+            $".create-merge table {STATUS_TABLE_NAME}(TableName:string, "
+            + "StartTxId:int, EndTxId:int, "
+            + "BlobPath:string, Action:string, Status:string)";
 
         private static BlobStatus DeserializeBlobStatus(IDataRecord r)
         {
             return new BlobStatus(
                 (string)r["TableName"],
-                (int)r["TxId"],
+                (int)r["StartTxId"],
+                (int)r["EndTxId"],
                 (string)r["BlobPath"],
                 (string)r["Action"],
                 (string)r["Status"],

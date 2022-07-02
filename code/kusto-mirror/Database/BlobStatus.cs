@@ -4,14 +4,16 @@
     {
         public BlobStatus(
             string tableName,
-            int txId,
+            int startTxId,
+            int endTxId,
             string blobPath,
             string action,
             string status,
             DateTime ingestionTime)
         {
             TableName = tableName;
-            TxId = txId;
+            StartTxId = startTxId;
+            EndTxId = endTxId;
             BlobPath = blobPath;
             Action = action;
             Status = status;
@@ -20,7 +22,9 @@
 
         public string TableName { get; }
 
-        public int TxId { get; }
+        public int StartTxId { get; }
+        
+        public int EndTxId { get; }
 
         public string BlobPath { get; }
 
