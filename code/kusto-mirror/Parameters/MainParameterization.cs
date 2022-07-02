@@ -38,16 +38,16 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
                     $"Invalid cluster query URL:  '{options.ClusterIngestionUrl}'");
             }
 
-            Uri? deltaTableUrl;
+            Uri? deltaTableStorageUrl;
 
-            if (!Uri.TryCreate(options.DeltaTableUrl, UriKind.Absolute, out deltaTableUrl))
+            if (!Uri.TryCreate(options.DeltaTableStorageUrl, UriKind.Absolute, out deltaTableStorageUrl))
             {
                 throw new MirrorException(
-                    $"Invalid Delta Table URL:  '{options.DeltaTableUrl}'");
+                    $"Invalid Delta Table URL:  '{options.DeltaTableStorageUrl}'");
             }
 
             var deltaTable = new DeltaTableParameterization(
-                deltaTableUrl,
+                deltaTableStorageUrl,
                 options.Database,
                 options.KustoTable,
                 options.IngestPartitionColumns);

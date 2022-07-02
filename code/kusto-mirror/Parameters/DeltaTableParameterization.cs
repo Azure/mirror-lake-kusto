@@ -3,18 +3,18 @@
     public class DeltaTableParameterization
     {
         public DeltaTableParameterization(
-            Uri deltaTableUrl,
+            Uri deltaTableStorageUrl,
             string database,
             string kustoTable,
             bool ingestPartitionColumns)
         {
-            DeltaTableUrl = deltaTableUrl;
+            DeltaTableStorageUrl = deltaTableStorageUrl;
             Database = database;
             KustoTable = kustoTable;
             IngestPartitionColumns = ingestPartitionColumns;
         }
 
-        public Uri DeltaTableUrl { get; }
+        public Uri DeltaTableStorageUrl { get; }
 
         public string Database { get; }
 

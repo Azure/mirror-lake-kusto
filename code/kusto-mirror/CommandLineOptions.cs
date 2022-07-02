@@ -10,13 +10,13 @@ namespace Kusto.Mirror.ConsoleApp
         [Option('a', "authMode", Required = false, HelpText = "Authentication mode:  AppSecret, AzCli or Browser")]
         public AuthenticationMode AuthenticationMode { get; set; } = AuthenticationMode.AzCli;
 
-        [Option('d', "delta", Required = false, HelpText = "Delta Table URL")]
-        public string DeltaTableUrl { get; set; } = string.Empty;
+        [Option('s', "storage", Required = false, HelpText = "Delta Table Storage URL")]
+        public string DeltaTableStorageUrl { get; set; } = string.Empty;
 
         [Option('i', "ingestion", Required = false, HelpText = "Cluster Ingestion URL")]
         public string ClusterIngestionUrl { get; set; } = string.Empty;
 
-        [Option("db", Required = false, HelpText = "Kusto Database")]
+        [Option('d', "db", Required = false, HelpText = "Kusto Database")]
         public string Database { get; set; } = string.Empty;
 
         [Option('t', "table", Required = false, HelpText = "Kusto Table")]
