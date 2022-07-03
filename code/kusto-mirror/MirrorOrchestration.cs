@@ -59,6 +59,7 @@ namespace Kusto.Mirror.ConsoleApp
                     .Select(t => new DeltaTableOrchestration(
                         t,
                         new DeltaTableGateway(
+                            parameters.AuthenticationMode,
                             tableParameterizationMap[t.TableName].DeltaTableStorageUrl)));
 
                 orchestrations.AddRange(tableOrchestrations);

@@ -13,6 +13,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
     {
         private const string STATUS_TABLE_NAME = "KM_DeltaStatus";
         private readonly DatabaseGateway _database;
+        private IImmutableList<BlobStatus> _statuses;
 
         public static async Task<IImmutableList<TableStatus>> LoadStatusTableAsync(
             DatabaseGateway database,
@@ -60,6 +61,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
         {
             _database = database;
             TableName = tableName;
+            _statuses = blobStatuses.ToImmutableArray();
         }
 
         public string TableName { get; }
@@ -68,6 +70,31 @@ namespace Kusto.Mirror.ConsoleApp.Database
             $".create-merge table {STATUS_TABLE_NAME}(TableName:string, "
             + "StartTxId:int, EndTxId:int, "
             + "BlobPath:string, Action:string, Status:string)";
+
+        public bool IsBatchIncomplete
+        {
+            get
+            {
+                var isBatchIncomplete = _statuses
+                    .Where(s => s.Status != BlobState.Loaded.ToString()
+                    || s.Status != BlobState.Deleted.ToString())
+                    .Any();
+
+                return isBatchIncomplete;
+            }
+        }
+
+        public int LastTxId
+        {
+            get
+            {
+                var lastTxId = _statuses.Any()
+                    ? _statuses.Max(s => s.EndTxId)
+                    : 0;
+
+                return lastTxId;
+            }
+        }
 
         private static BlobStatus DeserializeBlobStatus(IDataRecord r)
         {

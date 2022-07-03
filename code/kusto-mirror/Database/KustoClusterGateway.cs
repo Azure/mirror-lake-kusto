@@ -127,7 +127,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
                     return builder.WithAadUserPromptAuthentication();
 
                 default:
-                    throw new MirrorException(
+                    throw new NotSupportedException(
                         $"Unsupported authentication mode:  '{authenticationMode}'");
             }
         }

@@ -20,7 +20,20 @@ namespace Kusto.Mirror.ConsoleApp
 
         internal async Task RunAsync(CancellationToken ct)
         {
-            await Task.CompletedTask;
+            while (!ct.IsCancellationRequested)
+            {
+                if (_tableStatus.IsBatchIncomplete)
+                {
+                    throw new NotImplementedException();
+                }
+                else
+                {
+                    var currentTxId = _tableStatus.LastTxId;
+                    var currentState = await _deltaTableGateway.GetLatestStateAsync(ct);
+
+                    throw new NotImplementedException();
+                }
+            }
         }
     }
 }
