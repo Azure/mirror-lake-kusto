@@ -1,8 +1,12 @@
 ﻿using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
+using Azure.Storage.Sas;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,29 +23,91 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
             AuthenticationMode authenticationMode,
             Uri deltaTableStorageUrl)
         {
-            var url = deltaTableStorageUrl;
+            _deltaTableStorageUrl = deltaTableStorageUrl;
 
-            _deltaTableStorageUrl = url;
-
-            if (url.Segments.Length < 2)
+            if (_deltaTableStorageUrl.Segments.Length < 2)
             {
                 throw new ArgumentOutOfRangeException(
-                    $"Url should contain the blob container:  {url}");
+                    $"Url should contain the blob container:  {_deltaTableStorageUrl}");
             }
 
             var credentials = CreateStorageCredentials(authenticationMode);
-            var containerUrl =
-                $"{url.Scheme}://{url.Host}{url.Segments[0]}{url.Segments[1]}";
-            var tableFolder = string.Join(string.Empty, url.Segments.Skip(2));
-            var transactionLogsFolder = $"{tableFolder}/_delta_log";
+            var transactionLogsFolder = $"{_deltaTableStorageUrl}/_delta_log";
+            var builder = new BlobUriBuilder(new Uri(transactionLogsFolder));
 
-            _blobContainerClient = new BlobContainerClient(new Uri(containerUrl), credentials);
-            _transactionFolderPrefix = transactionLogsFolder;
+            //  Enforce blob storage API
+            builder.Host =
+                builder.Host.Replace(".dfs.core.windows.net", ".blob.core.windows.net");
+            //  No SAS support
+            builder.Sas = null;
+            //  Capture blob name
+            _transactionFolderPrefix = builder.BlobName;
+            //  Remove blob name to capture the container URI only
+            builder.BlobName = string.Empty;
+
+            _blobContainerClient = new BlobContainerClient(builder.ToUri(), credentials);
         }
 
-        internal Task<object> GetLatestStateAsync(CancellationToken ct)
+        internal async Task<object> GetLatestStateAsync(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var lastCheckpointName = $"{_transactionFolderPrefix}/_last_checkpoint";
+            var lastCheckpointBlob = _blobContainerClient.GetBlobClient(lastCheckpointName);
+            var lastCheckpointExists = await lastCheckpointBlob.ExistsAsync();
+
+            //if (lastCheckpointExists)
+            //{
+            //    throw new NotImplementedException();
+            //}
+            //else
+            {
+                var blobPageable = _blobContainerClient.GetBlobsAsync(
+                    BlobTraits.None,
+                    BlobStates.None,
+                    _transactionFolderPrefix,
+                    ct);
+                var blobItems = await blobPageable.ToListAsync();
+                var txLogTasks = blobItems
+                    .Select(b => new
+                    {
+                        b.Name,
+                        TxId = ExtractTransactionId(b.Name)
+                    })
+                    .Where(c => c.TxId.HasValue)
+                    .OrderBy(c => c.TxId!.Value)
+                    .Select(c => LoadTransactionBlobAsync(c.TxId!.Value, c.Name))
+                    .ToImmutableArray();
+
+                await Task.WhenAll(txLogTasks);
+
+                throw new NotImplementedException();
+            }
+        }
+
+        private async Task<TransactionLog> LoadTransactionBlobAsync(int txId, string name)
+        {
+            var blobClient = _blobContainerClient.GetBlockBlobClient(name);
+            var downloadResult = await blobClient.DownloadContentAsync();
+            var blobText = downloadResult.Value.Content.ToString();
+
+            return TransactionLog.LoadLog(txId, blobText);
+        }
+
+        private int? ExtractTransactionId(string blobName)
+        {
+            if (blobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                var lastSlash = blobName.LastIndexOf('/');
+                var lastDot = blobName.LastIndexOf('.');
+                var txIdText = blobName.Substring(lastSlash + 1, lastDot - lastSlash - 1);
+                int txId;
+
+                if (int.TryParse(txIdText, out txId))
+                {
+                    return txId;
+                }
+            }
+         
+            return null;
         }
 
         private static TokenCredential CreateStorageCredentials(
