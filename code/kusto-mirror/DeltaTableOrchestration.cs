@@ -29,7 +29,9 @@ namespace Kusto.Mirror.ConsoleApp
                 else
                 {
                     var currentTxId = _tableStatus.LastTxId;
-                    var currentState = await _deltaTableGateway.GetLatestStateAsync(ct);
+                    var currentState = await _deltaTableGateway.GetTransactionLogsAsync(
+                        currentTxId + 1,
+                        ct);
 
                     throw new NotImplementedException();
                 }

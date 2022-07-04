@@ -84,13 +84,13 @@ namespace Kusto.Mirror.ConsoleApp.Database
             }
         }
 
-        public int LastTxId
+        public int? LastTxId
         {
             get
             {
                 var lastTxId = _statuses.Any()
-                    ? _statuses.Max(s => s.EndTxId)
-                    : 0;
+                    ? (int?)_statuses.Max(s => s.EndTxId)
+                    : null;
 
                 return lastTxId;
             }

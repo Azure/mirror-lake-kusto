@@ -48,7 +48,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
             _blobContainerClient = new BlobContainerClient(builder.ToUri(), credentials);
         }
 
-        internal async Task<object> GetLatestStateAsync(CancellationToken ct)
+        internal async Task<object> GetTransactionLogsAsync(int? fromTxId, CancellationToken ct)
         {
             var lastCheckpointName = $"{_transactionFolderPrefix}/_last_checkpoint";
             var lastCheckpointBlob = _blobContainerClient.GetBlobClient(lastCheckpointName);
@@ -106,7 +106,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
                     return txId;
                 }
             }
-         
+
             return null;
         }
 
