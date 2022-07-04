@@ -14,7 +14,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
                 .Select(l => JsonSerializer.Deserialize<TransactionLogEntry>(l, options))
                 .ToImmutableArray();
 
-            throw new NotImplementedException();
+             throw new NotImplementedException();
         }
 
         public TransactionLog()
