@@ -21,6 +21,20 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
                 public IDictionary<string, string>? Options { get; set; }
             }
+
+            public class StructTypeData
+            {
+                public string Type { get; set; } = string.Empty;
+
+                public StructFieldData[]? Fields { get; set; }
+            }
+
+            public class StructFieldData
+            {
+                public string Name { get; set; } = string.Empty;
+
+                public string Type { get; set; } = string.Empty;
+            }
             #endregion
 
             public Guid Id { get; set; }

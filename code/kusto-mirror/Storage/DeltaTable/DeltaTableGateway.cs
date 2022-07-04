@@ -85,11 +85,18 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
 
         private async Task<TransactionLog> LoadTransactionBlobAsync(int txId, string name)
         {
-            var blobClient = _blobContainerClient.GetBlockBlobClient(name);
-            var downloadResult = await blobClient.DownloadContentAsync();
-            var blobText = downloadResult.Value.Content.ToString();
+            try
+            {
+                var blobClient = _blobContainerClient.GetBlockBlobClient(name);
+                var downloadResult = await blobClient.DownloadContentAsync();
+                var blobText = downloadResult.Value.Content.ToString();
 
-            return TransactionLog.LoadLog(txId, blobText);
+                return TransactionLog.LoadLog(txId, blobText);
+            }
+            catch(Exception ex)
+            {
+                throw new MirrorException($"Error loading transaction log '{name}'", ex);
+            }
         }
 
         private int? ExtractTransactionId(string blobName)
