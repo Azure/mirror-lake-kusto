@@ -4,6 +4,7 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Sas;
+using Kusto.Mirror.ConsoleApp.Database;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -11,7 +12,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
+namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class DeltaTableGateway
     {
@@ -50,6 +51,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
 
         internal async Task<IImmutableList<TransactionLog>> GetTransactionLogsAsync(
             int? fromTxId,
+            string kustoTableName,
             CancellationToken ct)
         {
             var lastCheckpointName = $"{_transactionFolderPrefix}/_last_checkpoint";
@@ -76,7 +78,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
                     })
                     .Where(c => c.TxId.HasValue)
                     .OrderBy(c => c.TxId!.Value)
-                    .Select(c => LoadTransactionBlobAsync(c.TxId!.Value, c.Name))
+                    .Select(c => LoadTransactionBlobAsync(
+                        c.TxId!.Value,
+                        c.Name,
+                        kustoTableName))
                     .ToImmutableArray();
 
                 await Task.WhenAll(txLogTasks);
@@ -89,19 +94,22 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
             }
         }
 
-        private async Task<TransactionLog> LoadTransactionBlobAsync(int txId, string name)
+        private async Task<TransactionLog> LoadTransactionBlobAsync(
+            int txId,
+            string blobName,
+            string kustoTableName)
         {
             try
             {
-                var blobClient = _blobContainerClient.GetBlockBlobClient(name);
+                var blobClient = _blobContainerClient.GetBlockBlobClient(blobName);
                 var downloadResult = await blobClient.DownloadContentAsync();
                 var blobText = downloadResult.Value.Content.ToString();
 
-                return TransactionLog.LoadLog(txId, blobText);
+                return TransactionLogEntry.LoadDeltaLog(txId, kustoTableName, blobText);
             }
             catch (Exception ex)
             {
-                throw new MirrorException($"Error loading transaction log '{name}'", ex);
+                throw new MirrorException($"Error loading transaction log '{blobName}'", ex);
             }
         }
 

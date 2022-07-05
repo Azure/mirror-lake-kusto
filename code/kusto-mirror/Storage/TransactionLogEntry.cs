@@ -1,7 +1,10 @@
-﻿using System;
+﻿using Kusto.Mirror.ConsoleApp.Database;
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Kusto.Mirror.ConsoleApp.Storage
@@ -63,7 +66,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
             public string Path { get; set; } = string.Empty;
 
-            public IDictionary<string, string>? PartitionValues { get; set; }
+            public ImmutableDictionary<string, string>? PartitionValues { get; set; }
 
             public long Size { get; set; }
 
@@ -86,7 +89,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
             public bool ExtendedFileMetadata { get; set; }
 
-            public IDictionary<string, string>? PartitionValues { get; set; }
+            public ImmutableDictionary<string, string>? PartitionValues { get; set; }
 
             public long Size { get; set; }
 
@@ -111,6 +114,224 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public class CommitInfoData
         {
+        }
+        #endregion
+
+        #region Load log
+        public static TransactionLog LoadDeltaLog(
+            int txId,
+            string kustoTableName,
+            string blobText)
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var lines = blobText.Split('\n');
+            var entries = lines
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Select(l => JsonSerializer.Deserialize<TransactionLogEntry>(l, options)!)
+                .ToImmutableArray();
+            var metadata = entries
+                .Where(e => e.Metadata != null)
+                .Select(e => e.Metadata!)
+                .ToImmutableArray();
+            var add = entries.Where(e => e.Add != null).Select(e => e.Add!);
+            var remove = entries.Where(e => e.Remove != null).Select(e => e.Remove!);
+
+            if (metadata.Count() > 1)
+            {
+                throw new MirrorException("More than one meta data node in one transaction");
+            }
+
+            var transactionMetadata = metadata.Any()
+                ? LoadMetadata(metadata.First(), txId, kustoTableName)
+                : null;
+            var transactionAdds = add
+                .Select(a => LoadAdd(a, txId, kustoTableName))
+                .ToImmutableArray();
+            var transactionRemoves = remove
+                .Select(a => LoadRemove(a, txId, kustoTableName))
+                .ToImmutableArray();
+
+            return new TransactionLog(
+                txId,
+                txId,
+                transactionMetadata,
+                transactionAdds,
+                transactionRemoves);
+        }
+
+        private static TransactionItem LoadMetadata(
+            MetadataData metadata,
+            int txId,
+            string kustoTableName)
+        {
+            if (metadata.Format == null || metadata.Format.Provider == null)
+            {
+                throw new ArgumentNullException(nameof(metadata.Format.Provider));
+            }
+            if (!metadata.Format.Provider.Equals("parquet", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    "Only Parquet is supported",
+                    nameof(metadata.Format.Provider));
+            }
+            var partitionColumns = metadata.PartitionColumns == null
+                ? ImmutableArray<string>.Empty
+                : metadata.PartitionColumns.ToImmutableArray();
+            var schema = ExtractSchema(metadata.SchemaString);
+            var createdTime = DateTimeOffset
+                .FromUnixTimeMilliseconds(metadata.CreatedTime)
+                .UtcDateTime;
+
+            var item = TransactionItem.CreateSchemaItem(
+                kustoTableName,
+                txId,
+                txId,
+                TransactionItemState.ToBeApplied,
+                createdTime,
+                null,
+                metadata.Id,
+                metadata.Name,
+                partitionColumns,
+                schema);
+
+            return item;
+        }
+
+        private static TransactionItem LoadAdd(
+            AddData addEntry,
+            int txId,
+            string kustoTableName)
+        {
+            if (string.IsNullOrWhiteSpace(addEntry.Path))
+            {
+                throw new ArgumentNullException(nameof(addEntry.Path));
+            }
+            if (addEntry.PartitionValues == null)
+            {
+                throw new ArgumentNullException(nameof(addEntry.PartitionValues));
+            }
+            var modificationTime = DateTimeOffset
+                .FromUnixTimeMilliseconds(addEntry.ModificationTime)
+                .UtcDateTime;
+            var recordCount = ExtractRecordCount(addEntry.Stats);
+            var item = TransactionItem.CreateAddItem(
+                kustoTableName,
+                txId,
+                txId,
+                TransactionItemState.ToBeAdded,
+                modificationTime,
+                null,
+                addEntry.Path,
+                addEntry.PartitionValues,
+                addEntry.Size,
+                recordCount);
+
+            return item;
+        }
+
+        private static TransactionItem LoadRemove(
+            RemoveData removeEntry,
+            int txId,
+            string kustoTableName)
+        {
+            if (string.IsNullOrWhiteSpace(removeEntry.Path))
+            {
+                throw new ArgumentNullException(nameof(removeEntry.Path));
+            }
+            if (removeEntry.PartitionValues == null)
+            {
+                throw new ArgumentNullException(nameof(removeEntry.PartitionValues));
+            }
+            var deletionTimestamp = DateTimeOffset
+                .FromUnixTimeMilliseconds(removeEntry.DeletionTimestamp)
+                .UtcDateTime;
+            var item = TransactionItem.CreateRemoveItem(
+                kustoTableName,
+                txId,
+                txId,
+                TransactionItemState.ToBeAdded,
+                deletionTimestamp,
+                null,
+                removeEntry.Path,
+                removeEntry.PartitionValues,
+                removeEntry.Size);
+
+            return item;
+        }
+        private static IImmutableDictionary<string, string> ExtractSchema(string schemaString)
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var typeData =
+                JsonSerializer.Deserialize<TransactionLogEntry.MetadataData.StructTypeData>(
+                    schemaString,
+                    options);
+
+            if (typeData == null)
+            {
+                throw new ArgumentException(
+                    $"Incorrect format:  '{schemaString}'",
+                    nameof(schemaString));
+            }
+            if (!string.Equals(typeData.Type, "struct", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new MirrorException($"schemaString type isn't a struct:  '{schemaString}'");
+            }
+            if (typeData.Fields == null)
+            {
+                throw new MirrorException($"schemaString doesn't contain fields:  '{schemaString}'");
+            }
+
+            var schema = typeData
+                .Fields
+                .ToImmutableDictionary(f => f.Name, f => GetKustoType(f.Type.ToLower()));
+
+            return schema;
+        }
+
+        private static string GetKustoType(string type)
+        {
+            switch (type)
+            {
+                case "string":
+                case "long":
+                case "double":
+                case "boolean":
+                case "decimal":
+                    return type;
+                case "integer":
+                case "short":
+                case "byte":
+                    return "int";
+                case "float":
+                    return "real";
+                case "binary":
+                    return "Parquet binary field type isn't supported in Kusto";
+                case "date":
+                case "timestamp":
+                    return "datetime";
+                case "":
+                    return "dynamic";
+
+                default:
+                    throw new NotImplementedException($"Unsupported field type:  '{type}'");
+            }
+        }
+        private static long ExtractRecordCount(string stats)
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var statsData =
+                JsonSerializer.Deserialize<TransactionLogEntry.AddData.StatsData>(
+                    stats,
+                    options);
+
+            if (statsData == null)
+            {
+                throw new ArgumentException(
+                    $"Incorrect format:  '{stats}'",
+                    nameof(stats));
+            }
+
+            return statsData.NumRecords;
         }
         #endregion
 

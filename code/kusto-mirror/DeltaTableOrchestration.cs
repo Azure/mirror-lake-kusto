@@ -1,5 +1,5 @@
 ﻿using Kusto.Mirror.ConsoleApp.Database;
-using Kusto.Mirror.ConsoleApp.Storage.DeltaTable;
+using Kusto.Mirror.ConsoleApp.Storage;
 using System.Collections.Immutable;
 
 namespace Kusto.Mirror.ConsoleApp
@@ -32,6 +32,7 @@ namespace Kusto.Mirror.ConsoleApp
                     var currentTxId = _tableStatus.LastTxId;
                     var newLogs = await _deltaTableGateway.GetTransactionLogsAsync(
                         currentTxId + 1,
+                        KustoTableName,
                         ct);
 
                     if (newLogs.Any())

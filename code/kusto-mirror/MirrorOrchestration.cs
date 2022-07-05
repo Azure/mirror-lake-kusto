@@ -1,6 +1,6 @@
 ﻿using Kusto.Mirror.ConsoleApp.Database;
 using Kusto.Mirror.ConsoleApp.Parameters;
-using Kusto.Mirror.ConsoleApp.Storage.DeltaTable;
+using Kusto.Mirror.ConsoleApp.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
 

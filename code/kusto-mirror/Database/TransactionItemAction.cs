@@ -6,13 +6,10 @@ using System.Threading.Tasks;
 
 namespace Kusto.Mirror.ConsoleApp.Database
 {
-    internal enum BlobState
+    internal enum TransactionItemAction
     {
-        ToBeAdded,
-        QueuedForIngestion,
-        Staged,
-        Loaded,
-        ToBeDeleted,
-        Deleted
+        Schema,
+        Add,
+        Remove
     }
 }
