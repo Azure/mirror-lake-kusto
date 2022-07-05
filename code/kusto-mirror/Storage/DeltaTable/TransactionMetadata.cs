@@ -24,7 +24,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
                 ? ImmutableArray<string>.Empty
                 : metadata.PartitionColumns.ToImmutableArray();
             Schema = ExtractSchema(metadata.SchemaString);
-            CreatedTime = metadata.CreatedTime;
+            CreatedTime = DateTimeOffset
+                .FromUnixTimeMilliseconds(metadata.CreatedTime)
+                .UtcDateTime;
         }
 
         public Guid DeltaTableId { get; }
@@ -35,7 +37,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
 
         public IImmutableDictionary<string, string> Schema { get; set; }
 
-        public long CreatedTime { get; }
+        public DateTime CreatedTime { get; }
 
         private static IImmutableDictionary<string, string> ExtractSchema(string schemaString)
         {
@@ -43,8 +45,14 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
             var typeData =
                 JsonSerializer.Deserialize<TransactionLogEntry.MetadataData.StructTypeData>(
                     schemaString,
-                    options)!;
+                    options);
 
+            if (typeData == null)
+            {
+                throw new ArgumentException(
+                    $"Incorrect format:  '{schemaString}'",
+                    nameof(schemaString));
+            }
             if (!string.Equals(typeData.Type, "struct", StringComparison.OrdinalIgnoreCase))
             {
                 throw new MirrorException($"schemaString type isn't a struct:  '{schemaString}'");

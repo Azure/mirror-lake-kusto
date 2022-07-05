@@ -1,5 +1,6 @@
 ﻿using Kusto.Mirror.ConsoleApp.Database;
 using Kusto.Mirror.ConsoleApp.Storage.DeltaTable;
+using System.Collections.Immutable;
 
 namespace Kusto.Mirror.ConsoleApp
 {
@@ -29,13 +30,27 @@ namespace Kusto.Mirror.ConsoleApp
                 else
                 {
                     var currentTxId = _tableStatus.LastTxId;
-                    var currentState = await _deltaTableGateway.GetTransactionLogsAsync(
+                    var newLogs = await _deltaTableGateway.GetTransactionLogsAsync(
                         currentTxId + 1,
                         ct);
 
-                    throw new NotImplementedException();
+                    if (newLogs.Any())
+                    {
+                        await PersistNewBatchAsync(newLogs);
+                    }
+                    else
+                    {
+                        throw new NotImplementedException();
+                    }
                 }
             }
+        }
+
+        private static Task PersistNewBatchAsync(IImmutableList<TransactionLog> newLogs)
+        {
+            var mergedLogs = TransactionLog.Coalesce(newLogs);
+
+            throw new NotImplementedException();
         }
     }
 }

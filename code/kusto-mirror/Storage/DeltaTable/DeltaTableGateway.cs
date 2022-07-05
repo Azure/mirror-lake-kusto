@@ -48,7 +48,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
             _blobContainerClient = new BlobContainerClient(builder.ToUri(), credentials);
         }
 
-        internal async Task<object> GetTransactionLogsAsync(int? fromTxId, CancellationToken ct)
+        internal async Task<IImmutableList<TransactionLog>> GetTransactionLogsAsync(
+            int? fromTxId,
+            CancellationToken ct)
         {
             var lastCheckpointName = $"{_transactionFolderPrefix}/_last_checkpoint";
             var lastCheckpointBlob = _blobContainerClient.GetBlobClient(lastCheckpointName);
@@ -79,7 +81,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
 
                 await Task.WhenAll(txLogTasks);
 
-                throw new NotImplementedException();
+                var txLogs = txLogTasks
+                    .Select(t => t.Result)
+                    .ToImmutableArray();
+
+                return txLogs;
             }
         }
 
@@ -93,7 +99,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
 
                 return TransactionLog.LoadLog(txId, blobText);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 throw new MirrorException($"Error loading transaction log '{name}'", ex);
             }

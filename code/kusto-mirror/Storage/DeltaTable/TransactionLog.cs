@@ -37,29 +37,71 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaTable
 
             return new TransactionLog(
                 txId,
+                txId,
                 transactionMetadata,
                 transactionAdds,
                 transactionRemoves);
         }
 
         public TransactionLog(
-            int txId,
+            int startTxId,
+            int endTxId,
             TransactionMetadata? transactionMetadata,
             IEnumerable<TransactionAdd> transactionAdds,
             IEnumerable<TransactionRemove> transactionRemoves)
         {
-            TxId = txId;
+            StartTxId = startTxId;
+            EndTxId = endTxId;
             TransactionMetadata = transactionMetadata;
             TransactionAdds = transactionAdds.ToImmutableArray();
             TransactionRemoves = transactionRemoves.ToImmutableArray();
         }
 
-        public int TxId { get; }
+        public int StartTxId { get; }
+        
+        public int EndTxId { get; }
 
         public TransactionMetadata? TransactionMetadata { get; }
 
         public IImmutableList<TransactionAdd> TransactionAdds { get; }
 
         public IImmutableList<TransactionRemove> TransactionRemoves { get; }
+
+        public TransactionLog Coalesce(TransactionLog second)
+        {
+            throw new NotImplementedException();
+        }
+
+        public static TransactionLog Coalesce(IEnumerable<TransactionLog> txLogs)
+        {
+            var span = new Span<TransactionLog>(txLogs.ToArray());
+
+            if (span.Length == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(txLogs),
+                    "Should contain at least of log");
+            }
+            else
+            {
+                return Coalesce(span[0], span.Slice(1));
+            }
+        }
+
+        private static TransactionLog Coalesce(TransactionLog first, Span<TransactionLog> txLogs)
+        {
+            if (txLogs.Length == 0)
+            {
+                return first;
+            }
+            else
+            {
+                var second = txLogs[0];
+                var merged = first.Coalesce(second);
+                var remains = txLogs.Slice(1);
+
+                return Coalesce(merged, remains);
+            }
+        }
     }
 }
