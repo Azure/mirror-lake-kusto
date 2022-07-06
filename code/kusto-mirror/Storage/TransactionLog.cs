@@ -10,10 +10,20 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             IEnumerable<TransactionItem> transactionAdds,
             IEnumerable<TransactionItem> transactionRemoves)
         {
+            if(transactionMetadata == null
+                && !transactionAdds.Any()
+                && !transactionRemoves.Any())
+            {
+                throw new ArgumentNullException(null, "There are no items");
+            }
             Metadata = transactionMetadata;
             Adds = transactionAdds.ToImmutableArray();
             Removes = transactionRemoves.ToImmutableArray();
         }
+
+        public string KustoDatabaseName => AllItems.First().KustoDatabaseName;
+
+        public string KustoTableName => AllItems.First().KustoTableName;
 
         public TransactionItem? Metadata { get; }
 

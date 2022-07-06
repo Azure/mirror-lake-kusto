@@ -12,24 +12,31 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     internal class TransactionItem
     {
         #region Inner types
-        private class DictionaryConverter : ITypeConverter
+        private class DictionaryConverter : DefaultTypeConverter
         {
-            object ITypeConverter.ConvertFromString(
+            public override object? ConvertFromString(
                 string text,
                 IReaderRow row,
                 MemberMapData memberMapData)
             {
-                var map = JsonSerializer.Deserialize<IImmutableDictionary<string, string>>(text);
-
-                if (map == null)
+                if (text == "null")
                 {
-                    throw new MirrorException($"Can't deserialize dictionary:  '{text}'");
+                    return null;
                 }
+                else
+                {
+                    var map = JsonSerializer.Deserialize<IImmutableDictionary<string, string>>(text);
 
-                return map;
+                    if (map == null)
+                    {
+                        throw new MirrorException($"Can't deserialize dictionary:  '{text}'");
+                    }
+
+                    return map;
+                }
             }
 
-            string ITypeConverter.ConvertToString(
+            public override string? ConvertToString(
                 object value,
                 IWriterRow row,
                 MemberMapData memberMapData)
@@ -41,24 +48,31 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             }
         }
 
-        private class ListConverter : ITypeConverter
+        private class ListConverter : DefaultTypeConverter
         {
-            object ITypeConverter.ConvertFromString(
+            public override object? ConvertFromString(
                 string text,
                 IReaderRow row,
                 MemberMapData memberMapData)
             {
-                var array = JsonSerializer.Deserialize<IImmutableList<string>>(text);
-
-                if (array == null)
+                if (text == "null")
                 {
-                    throw new MirrorException($"Can't deserialize list:  '{text}'");
+                    return null;
                 }
+                else
+                {
+                    var array = JsonSerializer.Deserialize<IImmutableList<string>>(text);
 
-                return array;
+                    if (array == null)
+                    {
+                        throw new MirrorException($"Can't deserialize list:  '{text}'");
+                    }
+
+                    return array;
+                }
             }
 
-            string ITypeConverter.ConvertToString(
+            public override string? ConvertToString(
                 object value,
                 IWriterRow row,
                 MemberMapData memberMapData)
@@ -319,6 +333,26 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 var buffer = stream.ToArray();
 
                 return new ReadOnlyMemory<byte>(buffer);
+            }
+        }
+
+        public static IImmutableList<TransactionItem> FromCsv(
+            ReadOnlyMemory<byte> buffer,
+            bool validateHeader)
+        {
+            using (var stream = new MemoryStream(buffer.ToArray()))
+            using (var reader = new StreamReader(stream))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                if (validateHeader)
+                {
+                    csv.Read();
+                    csv.ReadHeader();
+                    csv.ValidateHeader<TransactionItem>();
+                }
+                var items = csv.GetRecords<TransactionItem>();
+
+                return items.ToImmutableArray();
             }
         }
     }

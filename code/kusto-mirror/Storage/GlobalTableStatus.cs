@@ -28,6 +28,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
             if (blocks.Count() > 0)
             {
+                var content = await bookmarkGateway.ReadAllContentAsync(ct);
+                var items = TransactionItem.FromCsv(content, true);
+
                 throw new NotImplementedException();
             }
 

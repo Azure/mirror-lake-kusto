@@ -116,8 +116,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
         {
             if (_blocks.Any())
             {
-                var content =
-                    (await _blobClient.DownloadContentAsync(ct)).Value.Content.ToMemory();
+                var content = await ReadAllContentAsync(ct);
                 var bookmarkBlockBuilder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
                 var offset = 0;
 
@@ -136,6 +135,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
             {   //  To prevent reading a non-existing blob
                 return ImmutableArray<BookmarkBlock>.Empty;
             }
+        }
+
+        public async Task<ReadOnlyMemory<byte>> ReadAllContentAsync(CancellationToken ct)
+        {
+            return (await _blobClient.DownloadContentAsync(ct)).Value.Content.ToMemory();
         }
 
         public async Task<BookmarkTransactionResult> ApplyTransactionAsync(
