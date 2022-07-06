@@ -10,6 +10,9 @@ namespace Kusto.Mirror.ConsoleApp
         [Option('a', "authMode", Required = false, HelpText = "Authentication mode:  AppSecret, AzCli or Browser")]
         public AuthenticationMode AuthenticationMode { get; set; } = AuthenticationMode.AzCli;
 
+        [Option('c', "checkpoint", Required = false, HelpText = "Checkpoint CSV blob URL")]
+        public string CheckpointBlobUrl { get; set; } = string.Empty;
+
         [Option('s', "storage", Required = false, HelpText = "Delta Table Storage URL")]
         public string DeltaTableStorageUrl { get; set; } = string.Empty;
 

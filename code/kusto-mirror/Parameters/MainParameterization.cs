@@ -38,8 +38,14 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
                     $"Invalid cluster query URL:  '{options.ClusterIngestionUrl}'");
             }
 
+            Uri? checkpointBlobUrl;
             Uri? deltaTableStorageUrl;
 
+            if (!Uri.TryCreate(options.CheckpointBlobUrl, UriKind.Absolute, out checkpointBlobUrl))
+            {
+                throw new MirrorException(
+                    $"Invalid Checkpoint Blob URL:  '{options.CheckpointBlobUrl}'");
+            }
             if (!Uri.TryCreate(options.DeltaTableStorageUrl, UriKind.Absolute, out deltaTableStorageUrl))
             {
                 throw new MirrorException(
@@ -47,6 +53,7 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
             }
 
             var deltaTable = new DeltaTableParameterization(
+                checkpointBlobUrl,
                 deltaTableStorageUrl,
                 options.Database,
                 options.KustoTable,
