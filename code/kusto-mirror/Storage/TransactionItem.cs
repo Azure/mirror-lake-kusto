@@ -13,7 +13,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             TransactionItemAction action,
             TransactionItemState state,
             DateTime timestamp,
-            DateTime? ingestionTime,
             string? blobPath,
             IImmutableDictionary<string, string>? partitionValues,
             long? size,
@@ -30,7 +29,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             Action = action;
             State = state;
             Timestamp = timestamp;
-            IngestionTime = ingestionTime;
             BlobPath = blobPath;
             PartitionValues = partitionValues;
             Size = size;
@@ -48,7 +46,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             int endTxId,
             TransactionItemState state,
             DateTime timestamp,
-            DateTime? ingestionTime,
             string blobPath,
             IImmutableDictionary<string, string> partitionValues,
             long size,
@@ -62,7 +59,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 TransactionItemAction.Add,
                 state,
                 timestamp,
-                ingestionTime,
                 blobPath,
                 partitionValues,
                 size,
@@ -80,7 +76,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             int endTxId,
             TransactionItemState state,
             DateTime timestamp,
-            DateTime? ingestionTime,
             string blobPath,
             IImmutableDictionary<string, string> partitionValues,
             long size)
@@ -93,7 +88,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 TransactionItemAction.Remove,
                 state,
                 timestamp,
-                ingestionTime,
                 blobPath,
                 partitionValues,
                 size,
@@ -111,7 +105,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             int endTxId,
             TransactionItemState state,
             DateTime timestamp,
-            DateTime? ingestionTime,
             Guid deltaTableId,
             string deltaTableName,
             IImmutableList<string> partitionColumns,
@@ -125,7 +118,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 TransactionItemAction.Schema,
                 state,
                 timestamp,
-                ingestionTime,
                 null,
                 null,
                 null,
@@ -162,9 +154,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         /// For remove:  deletion time.
         /// </summary>
         public DateTime Timestamp { get; }
-
-        /// <summary>Time of ingestion when read from Kusto, otherwise <c>null</c>.</summary>
-        public DateTime? IngestionTime { get; }
         #endregion
 
         #region Add / Remove common properties

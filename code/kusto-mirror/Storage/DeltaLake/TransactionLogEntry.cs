@@ -189,7 +189,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                 txId,
                 TransactionItemState.ToBeApplied,
                 createdTime,
-                null,
                 metadata.Id,
                 metadata.Name,
                 partitionColumns,
@@ -223,7 +222,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                 txId,
                 TransactionItemState.ToBeAdded,
                 modificationTime,
-                null,
                 addEntry.Path,
                 addEntry.PartitionValues,
                 addEntry.Size,
@@ -256,7 +254,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                 txId,
                 TransactionItemState.ToBeAdded,
                 deletionTimestamp,
-                null,
                 removeEntry.Path,
                 removeEntry.PartitionValues,
                 removeEntry.Size);

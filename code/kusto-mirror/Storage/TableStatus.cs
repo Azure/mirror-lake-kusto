@@ -78,7 +78,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                         (int)r["EndTxId"],
                         Enum.Parse<TransactionItemState>((string)r["State"]),
                         (DateTime)r["Timestamp"],
-                        (DateTime?)r["IngestionTime"],
                         (string)r["BlobPath"],
                         DeserializeDictionary((string)r["PartitionValues"]),
                         (long)r["Size"],
@@ -91,7 +90,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                         (int)r["EndTxId"],
                         Enum.Parse<TransactionItemState>((string)r["State"]),
                         (DateTime)r["Timestamp"],
-                        (DateTime?)r["IngestionTime"],
                         (string)r["BlobPath"],
                         DeserializeDictionary((string)r["PartitionValues"]),
                         (long)r["Size"]);
@@ -103,7 +101,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                         (int)r["EndTxId"],
                         Enum.Parse<TransactionItemState>((string)r["State"]),
                         (DateTime)r["Timestamp"],
-                        (DateTime?)r["IngestionTime"],
                         Guid.Parse((string)r["DeltaTableId"]),
                         (string)r["DeltaTableName"],
                         DeserializeArray((string)r["PartitionColumns"]),
