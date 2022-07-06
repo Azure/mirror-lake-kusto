@@ -1,13 +1,76 @@
 ﻿using CsvHelper;
+using CsvHelper.Configuration;
 using CsvHelper.Configuration.Attributes;
+using CsvHelper.TypeConversion;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 
 namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TransactionItem
     {
+        #region Inner types
+        private class DictionaryConverter : ITypeConverter
+        {
+            object ITypeConverter.ConvertFromString(
+                string text,
+                IReaderRow row,
+                MemberMapData memberMapData)
+            {
+                var map = JsonSerializer.Deserialize<IImmutableDictionary<string, string>>(text);
+
+                if (map == null)
+                {
+                    throw new MirrorException($"Can't deserialize dictionary:  '{text}'");
+                }
+
+                return map;
+            }
+
+            string ITypeConverter.ConvertToString(
+                object value,
+                IWriterRow row,
+                MemberMapData memberMapData)
+            {
+                var map = (IImmutableDictionary<string, string>)value;
+                var text = JsonSerializer.Serialize<IImmutableDictionary<string, string>>(map);
+
+                return text;
+            }
+        }
+
+        private class ListConverter : ITypeConverter
+        {
+            object ITypeConverter.ConvertFromString(
+                string text,
+                IReaderRow row,
+                MemberMapData memberMapData)
+            {
+                var array = JsonSerializer.Deserialize<IImmutableList<string>>(text);
+
+                if (array == null)
+                {
+                    throw new MirrorException($"Can't deserialize list:  '{text}'");
+                }
+
+                return array;
+            }
+
+            string ITypeConverter.ConvertToString(
+                object value,
+                IWriterRow row,
+                MemberMapData memberMapData)
+            {
+                var list = (IImmutableList<string>)value;
+                var text = JsonSerializer.Serialize<IImmutableList<string>>(list);
+
+                return text;
+            }
+        }
+        #endregion
+
         #region Constructors
         /// <summary>This should only be called by serializer.</summary>
         public TransactionItem()
@@ -182,56 +245,80 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         #region Add / Remove common properties
         /// <summary>Path to the blob to add / remove.</summary>
         [Index(7)]
-        public string? BlobPath { get; }
+        public string? BlobPath { get; set; }
 
         /// <summary>Partition values for the data being added / removed.</summary>
+        [TypeConverter(typeof(DictionaryConverter))]
         [Index(8)]
-        public IImmutableDictionary<string, string>? PartitionValues { get; }
+        public IImmutableDictionary<string, string>? PartitionValues { get; set; }
 
         /// <summary>Size in byte of the blob to add / remove.</summary>
         [Index(9)]
-        public long? Size { get; }
+        public long? Size { get; set; }
         #endregion
 
         #region Add only
         /// <summary>Number of records in the blob to add.</summary>
         [Index(10)]
-        public long? RecordCount { get; }
+        public long? RecordCount { get; set; }
         #endregion
 
         #region Schema only
         /// <summary>Unique id of the delta table (in Spark).</summary>
         [Index(11)]
-        public Guid? DeltaTableId { get; }
+        public Guid? DeltaTableId { get; set; }
 
         /// <summary>Unique id of the delta table (in Spark).</summary>
         [Index(12)]
-        public string? DeltaTableName { get; }
+        public string? DeltaTableName { get; set; }
 
         /// <summary>List of the partition columns.</summary>
         [Index(13)]
-        public IImmutableList<string>? PartitionColumns { get; }
+        [TypeConverter(typeof(ListConverter))]
+        public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
         [Index(14)]
+        [TypeConverter(typeof(DictionaryConverter))]
         public IImmutableDictionary<string, string>? Schema { get; set; }
         #endregion
 
-        public static string GetHeader()
+        public static ReadOnlyMemory<byte> GetCsvHeader()
         {
             using (var stream = new MemoryStream())
             using (var writer = new StreamWriter(stream))
             using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
                 csv.WriteHeader<TransactionItem>();
+                csv.NextRecord();
                 csv.Flush();
                 writer.Flush();
                 stream.Flush();
 
                 var buffer = stream.ToArray();
-                var text = ASCIIEncoding.UTF8.GetString(buffer);
 
-                return text;
+                return new ReadOnlyMemory<byte>(buffer);
+            }
+        }
+
+        public static ReadOnlyMemory<byte> ToCsv(IEnumerable<TransactionItem> items)
+        {
+            using (var stream = new MemoryStream())
+            using (var writer = new StreamWriter(stream))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            {
+                foreach (var item in items)
+                {
+                    csv.WriteRecord(item);
+                    csv.NextRecord();
+                }
+                csv.Flush();
+                writer.Flush();
+                stream.Flush();
+
+                var buffer = stream.ToArray();
+
+                return new ReadOnlyMemory<byte>(buffer);
             }
         }
     }

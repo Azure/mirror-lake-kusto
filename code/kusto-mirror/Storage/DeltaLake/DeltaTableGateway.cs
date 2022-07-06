@@ -97,8 +97,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
         private async Task<TransactionLog> LoadTransactionBlobAsync(
             int txId,
-            string kustoDatabaseName,
             string blobName,
+            string kustoDatabaseName,
             string kustoTableName)
         {
             try

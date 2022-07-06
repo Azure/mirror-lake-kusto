@@ -32,8 +32,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public string TableName { get; }
 
-        public Task PersistNewBatchAsync(TransactionLog log, CancellationToken ct)
+        public async Task PersistNewBatchAsync(TransactionLog log, CancellationToken ct)
         {
+            await _globalTableStatus.PersistNewBatchAsync(log, ct);
+
             throw new NotImplementedException();
         }
 
@@ -61,77 +63,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
                 return lastTxId;
             }
-        }
-
-        private static TransactionItem DeserializeBlobStatus(IDataRecord r)
-        {
-            var actionText = (string)r["Action"];
-            var action = Enum.Parse<TransactionItemAction>(actionText);
-
-            switch (action)
-            {
-                case TransactionItemAction.Add:
-                    return TransactionItem.CreateAddItem(
-                        "DB MISSING",
-                        (string)r["KustoTableName"],
-                        (int)r["StartTxId"],
-                        (int)r["EndTxId"],
-                        Enum.Parse<TransactionItemState>((string)r["State"]),
-                        (DateTime)r["Timestamp"],
-                        (string)r["BlobPath"],
-                        DeserializeDictionary((string)r["PartitionValues"]),
-                        (long)r["Size"],
-                        (long)r["RecordCount"]);
-                case TransactionItemAction.Remove:
-                    return TransactionItem.CreateRemoveItem(
-                        "DB MISSING",
-                        (string)r["KustoTableName"],
-                        (int)r["StartTxId"],
-                        (int)r["EndTxId"],
-                        Enum.Parse<TransactionItemState>((string)r["State"]),
-                        (DateTime)r["Timestamp"],
-                        (string)r["BlobPath"],
-                        DeserializeDictionary((string)r["PartitionValues"]),
-                        (long)r["Size"]);
-                case TransactionItemAction.Schema:
-                    return TransactionItem.CreateSchemaItem(
-                        "DB MISSING",
-                        (string)r["KustoTableName"],
-                        (int)r["StartTxId"],
-                        (int)r["EndTxId"],
-                        Enum.Parse<TransactionItemState>((string)r["State"]),
-                        (DateTime)r["Timestamp"],
-                        Guid.Parse((string)r["DeltaTableId"]),
-                        (string)r["DeltaTableName"],
-                        DeserializeArray((string)r["PartitionColumns"]),
-                        DeserializeDictionary((string)r["Schema"]));
-                default:
-                    throw new NotSupportedException($"Action '{action}'");
-            }
-        }
-
-        private static IImmutableList<string> DeserializeArray(string text)
-        {
-            var array = JsonSerializer.Deserialize<ImmutableArray<string>>(text);
-
-            if (array == null)
-            {
-                throw new MirrorException($"Can't deserialize list:  '{text}'");
-            }
-
-            return array;
-        }
-
-        private static IImmutableDictionary<string, string> DeserializeDictionary(string text)
-        {
-            var map = JsonSerializer.Deserialize<ImmutableDictionary<string, string>>(text);
-
-            if (map == null)
-            {
-                throw new MirrorException($"Can't deserialize dictionary:  '{text}'");
-            }
-
-            return map;
         }
     }
 }
