@@ -1,4 +1,5 @@
 ﻿using Azure.Core;
+using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using System;
@@ -27,13 +28,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
             public int Id { get; }
 
             public int Size { get; }
-        }
-
-        private class BookmarkHeader
-        {
-            public Version BookmarkVersion { get; set; } = new Version(0, 1);
-
-            public Version AppVersion { get; set; } = new Version();
         }
 
         private class CommitItem
@@ -81,10 +75,17 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
         public static async Task<BookmarkGateway> CreateAsync(
             Uri blobUri,
             TokenCredential credential,
-            bool shouldExist)
+            bool shouldExist,
+            CancellationToken ct)
         {
+            var builder = new BlobUriBuilder(blobUri);
+
+            //  Enforce blob storage API
+            builder.Host =
+                builder.Host.Replace(".dfs.core.windows.net", ".blob.core.windows.net");
+            blobUri = builder.ToUri();
             var blobClient = new BlockBlobClient(blobUri, credential);
-            var exist = (await blobClient.ExistsAsync()).Value;
+            bool exist = await BlobExistsAsync(blobClient, ct);
 
             if (!exist)
             {
@@ -99,7 +100,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
             }
             else
             {
-                var blockLists = await blobClient.GetBlockListAsync(BlockListTypes.Committed);
+                var blockLists = await blobClient.GetBlockListAsync(
+                    BlockListTypes.Committed,
+                    cancellationToken: ct);
                 var blocks = blockLists
                     .Value
                     .CommittedBlocks
@@ -109,89 +112,66 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
             }
         }
 
-        public async Task<IImmutableList<BookmarkBlock>> ReadAllBlocksAsync()
+        public async Task<IImmutableList<BookmarkBlock>> ReadAllBlocksAsync(CancellationToken ct)
         {
-            var content = (await _blobClient.DownloadContentAsync()).Value.Content.ToMemory();
-            var bookmarkBlockBuilder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
-            var offset = 0;
-
-            foreach (var block in _blocks)
+            if (_blocks.Any())
             {
-                var buffer = content.Slice(offset, block.Size);
-                var bookmarkBlock = new BookmarkBlock(block.Id, buffer);
+                var content =
+                    (await _blobClient.DownloadContentAsync(ct)).Value.Content.ToMemory();
+                var bookmarkBlockBuilder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
+                var offset = 0;
 
-                if (offset == 0)
-                {   //  This is the header ; let's validate it
-                    var header = JsonSerializer.Deserialize<BookmarkHeader>(buffer.Span);
-
-                    if (header == null || header.BookmarkVersion != new BookmarkHeader().BookmarkVersion)
-                    {
-                        throw new MirrorException($"Wrong header on ${_blobClient.Uri}");
-                    }
-                }
-                else
+                foreach (var block in _blocks)
                 {
+                    var buffer = content.Slice(offset, block.Size);
+                    var bookmarkBlock = new BookmarkBlock(block.Id, buffer);
+
                     bookmarkBlockBuilder.Add(bookmarkBlock);
+                    offset += block.Size;
                 }
-                offset += block.Size;
+
+                return bookmarkBlockBuilder.ToImmutable();
             }
-
-            return bookmarkBlockBuilder.ToImmutable();
-        }
-
-        public async Task<IImmutableList<BookmarkBlockValue<T>>> ReadAllBlockValuesAsync<T>()
-        {
-            var blocks = await ReadAllBlocksAsync();
-            var values = blocks
-                .Select(b => new BookmarkBlockValue<T>(
-                    b.Id,
-                    SerializationHelper.ToObject<T>(b.Buffer)))
-                .ToImmutableArray();
-
-            return values;
+            else
+            {   //  To prevent reading a non-existing blob
+                return ImmutableArray<BookmarkBlock>.Empty;
+            }
         }
 
         public async Task<BookmarkTransactionResult> ApplyTransactionAsync(
-            BookmarkTransaction transaction)
+            BookmarkTransaction transaction,
+            CancellationToken ct)
         {
-            var headerFunc = async () =>
-            {
-                var id = NewId();
-                var stream = GetBookmarkHeaderStream();
-
-                await _blobClient.StageBlockAsync(EncodeId(id), stream);
-
-                return new BlockInfo(id, (int)stream.Length);
-            };
-            var headerTasks = !_blocks.Any() ? new[] { headerFunc() } : new Task<BlockInfo>[0];
-            var createBlockFunc = async (ReadOnlyMemory<byte> buffer) =>
+            var createBlockFuncAsync = async (ReadOnlyMemory<byte> buffer) =>
             {
                 var id = NewId();
 
-                await _blobClient.StageBlockAsync(EncodeId(id), new MemoryStream(buffer.ToArray()));
+                await _blobClient.StageBlockAsync(
+                    EncodeId(id),
+                    new MemoryStream(buffer.ToArray()),
+                    cancellationToken: ct);
 
                 return new BlockInfo(id, buffer.Length);
             };
             var addingTasks = transaction
                 .AddingBlockBuffers
-                .Select(b => createBlockFunc(b))
+                .Select(b => createBlockFuncAsync(b))
                 .ToImmutableArray();
             var updatingComposites = transaction
                 .UpdatingBlocks
-                .Select(b => new { OldId = b.Id, Task = createBlockFunc(b.Buffer) })
+                .Select(b => new { OldId = b.Id, Task = createBlockFuncAsync(b.Buffer) })
                 .ToImmutableArray();
 
             await Task.WhenAll(
                 addingTasks
-                .Concat(headerTasks)
                 .Concat(updatingComposites.Select(t => t.Task)));
 
             var item = new CommitItem(
-                headerTasks.Concat(addingTasks).Select(t => t.Result),
+                addingTasks.Select(t => t.Result),
                 transaction.DeletingBlockIds,
                 updatingComposites.Select(c => (c.OldId, c.Task.Result)));
 
-            await CommitTransactionAsync(item);
+            await CommitTransactionAsync(item, ct);
 
             //  Do not put headerBlockIds on purpose as this is implementation detail for this class
             return new BookmarkTransactionResult(
@@ -200,7 +180,25 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
                 transaction.DeletingBlockIds);
         }
 
-        private async Task CommitTransactionAsync(CommitItem newItem)
+        private static async Task<bool> BlobExistsAsync(
+            BlockBlobClient blobClient,
+            CancellationToken ct)
+        {   //  We built that method since the BlobClient.ExistAsync()
+            //  throws when blob not exist
+            var container = blobClient.GetParentBlobContainerClient();
+            var asyncList = container.GetBlobsAsync(
+                prefix: blobClient.Name,
+                cancellationToken: ct);
+
+            await foreach (var item in asyncList)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private async Task CommitTransactionAsync(CommitItem newItem, CancellationToken ct)
         {   //  A bit of multithreading synchronization here
             //  Stack the item
             _commitItems.Push(newItem);
@@ -223,13 +221,13 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
                     //  Did we actually pick any item or they all got stolen by another thread?
                     if (items.Any())
                     {
-                        await CommitItemsAsync(items);
+                        await CommitItemsAsync(items, ct);
                     }
                 }
             });
         }
 
-        private async Task CommitItemsAsync(IEnumerable<CommitItem> items)
+        private async Task CommitItemsAsync(IEnumerable<CommitItem> items, CancellationToken ct)
         {
             var blocksToAdd = items
                 .Select(i => i.BlocksToAdd)
@@ -267,7 +265,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
             _blocks.AddRange(blocksToAdd);
 
             //  Actually commit the new block list to the blob
-            await _blobClient.CommitBlockListAsync(_blocks.Select(b => EncodeId(b.Id)));
+            await _blobClient.CommitBlockListAsync(
+                _blocks.Select(b => EncodeId(b.Id)),
+                cancellationToken: ct);
 
             //  Recover unused ids
             foreach (var id in blockIdsToRemove)
@@ -294,11 +294,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
             {
                 return Interlocked.Increment(ref _nextBlockId);
             }
-        }
-
-        private static MemoryStream GetBookmarkHeaderStream()
-        {
-            return new MemoryStream(SerializationHelper.ToBytes(new BookmarkHeader()));
         }
 
         private static string EncodeId(int id)

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Immutable;
 using System.Text.Json;
 
-namespace Kusto.Mirror.ConsoleApp.Database
+namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TransactionLog
     {

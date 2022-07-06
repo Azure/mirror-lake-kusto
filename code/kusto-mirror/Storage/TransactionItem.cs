@@ -1,6 +1,6 @@
 ﻿using System.Collections.Immutable;
 
-namespace Kusto.Mirror.ConsoleApp.Database
+namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TransactionItem
     {

@@ -39,12 +39,13 @@ namespace Kusto.Mirror.ConsoleApp.Database
                 ct);
         }
 
-        public async Task CreateMergeDatabaseObjectsAsync(CancellationToken ct)
+        public Task CreateMergeDatabaseObjectsAsync(CancellationToken ct)
         {
-            await ExecuteCommandAsync(
-                TableStatus.CreateStatusTableCommandText,
-                r => 0,
-                ct);
+            return Task.CompletedTask;
+            //await ExecuteCommandAsync(
+            //    TableStatus.CreateStatusTableCommandText,
+            //    r => 0,
+            //    ct);
         }
     }
 }

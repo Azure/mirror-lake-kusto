@@ -28,9 +28,16 @@ namespace Kusto.Mirror.ConsoleApp
             string? requestDescription,
             CancellationToken ct)
         {
-            Trace.WriteLine("Initialize Kusto Cluster connections...");
+            Trace.WriteLine("Initialize Storage connections...");
 
             var storageCredentials = CreateStorageCredentials(parameters.AuthenticationMode);
+            var globalTableStatus = await GlobalTableStatus.RetrieveAsync(
+                parameters.CheckpointBlobUrl,
+                storageCredentials,
+                ct);
+
+            Trace.WriteLine("Initialize Kusto Cluster connections...");
+
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.AuthenticationMode,
                 parameters.ClusterIngestionUri,
@@ -56,14 +63,12 @@ namespace Kusto.Mirror.ConsoleApp
                 var tableNames = db.Tables.Select(t => t.KustoTable);
                 var tableParameterizationMap = db.Tables.ToImmutableDictionary(
                     t => t.KustoTable);
-                var statusTables =
-                    await TableStatus.LoadStatusTableAsync(db.Gateway, tableNames, ct);
-                var tableOrchestrations = statusTables
+                var tableOrchestrations = tableNames
                     .Select(t => new DeltaTableOrchestration(
-                        t,
+                        globalTableStatus.GetSingleTableStatus(db.Gateway.DatabaseName, t),
                         new DeltaTableGateway(
                             storageCredentials,
-                            tableParameterizationMap[t.TableName].DeltaTableStorageUrl)));
+                            tableParameterizationMap[t].DeltaTableStorageUrl)));
 
                 orchestrations.AddRange(tableOrchestrations);
             }
