@@ -6,22 +6,14 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     internal class TransactionLog
     {
         public TransactionLog(
-            int startTxId,
-            int endTxId,
             TransactionItem? transactionMetadata,
             IEnumerable<TransactionItem> transactionAdds,
             IEnumerable<TransactionItem> transactionRemoves)
         {
-            StartTxId = startTxId;
-            EndTxId = endTxId;
             Metadata = transactionMetadata;
             Adds = transactionAdds.ToImmutableArray();
             Removes = transactionRemoves.ToImmutableArray();
         }
-
-        public int StartTxId { get; }
-
-        public int EndTxId { get; }
 
         public TransactionItem? Metadata { get; }
 

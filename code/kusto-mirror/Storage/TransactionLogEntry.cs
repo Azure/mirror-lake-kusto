@@ -152,8 +152,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 .ToImmutableArray();
 
             return new TransactionLog(
-                txId,
-                txId,
                 transactionMetadata,
                 transactionAdds,
                 transactionRemoves);
