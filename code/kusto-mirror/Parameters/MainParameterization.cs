@@ -12,10 +12,12 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
         public MainParameterization(
             AuthenticationMode authenticationMode,
             Uri clusterQueryUri,
+            Uri checkpointBlobUrl,
             IEnumerable<DeltaTableParameterization> deltaTableParameterizations)
         {
             AuthenticationMode = authenticationMode;
             ClusterIngestionUri = clusterQueryUri;
+            CheckpointBlobUrl = checkpointBlobUrl;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
         }
 
@@ -53,7 +55,6 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
             }
 
             var deltaTable = new DeltaTableParameterization(
-                checkpointBlobUrl,
                 deltaTableStorageUrl,
                 options.Database,
                 options.KustoTable,
@@ -62,12 +63,15 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
             return new MainParameterization(
                 options.AuthenticationMode,
                 clusterQueryUri,
+                checkpointBlobUrl,
                 new[] { deltaTable });
         }
 
         public AuthenticationMode AuthenticationMode { get; }
 
         public Uri ClusterIngestionUri { get; }
+
+        public Uri CheckpointBlobUrl { get; }
 
         public IImmutableList<DeltaTableParameterization> DeltaTableParameterizations { get; }
     }
