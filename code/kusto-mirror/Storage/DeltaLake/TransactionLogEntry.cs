@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Storage
+namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 {
     /// <summary>
     /// Based on https://github.com/delta-io/delta/blob/master/PROTOCOL.md#actions

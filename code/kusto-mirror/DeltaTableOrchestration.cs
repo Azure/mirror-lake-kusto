@@ -1,5 +1,6 @@
 ﻿using Kusto.Mirror.ConsoleApp.Database;
 using Kusto.Mirror.ConsoleApp.Storage;
+using Kusto.Mirror.ConsoleApp.Storage.DeltaLake;
 using System.Collections.Immutable;
 
 namespace Kusto.Mirror.ConsoleApp
