@@ -6,6 +6,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     {
         #region Constructors
         private TransactionItem(
+            string kustoDatabaseName,
             string kustoTableName,
             int startTxId,
             int endTxId,
@@ -22,6 +23,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             IImmutableList<string>? partitionColumns,
             IImmutableDictionary<string, string>? schema)
         {
+            KustoDatabaseName = kustoDatabaseName;
             KustoTableName = kustoTableName;
             StartTxId = startTxId;
             EndTxId = endTxId;
@@ -40,6 +42,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         }
 
         public static TransactionItem CreateAddItem(
+            string kustoDatabaseName,
             string kustoTableName,
             int startTxId,
             int endTxId,
@@ -52,6 +55,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             long recordCount)
         {
             return new TransactionItem(
+                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -70,6 +74,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         }
 
         public static TransactionItem CreateRemoveItem(
+            string kustoDatabaseName,
             string kustoTableName,
             int startTxId,
             int endTxId,
@@ -81,6 +86,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             long size)
         {
             return new TransactionItem(
+                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -99,6 +105,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         }
 
         public static TransactionItem CreateSchemaItem(
+            string kustoDatabaseName,
             string kustoTableName,
             int startTxId,
             int endTxId,
@@ -111,6 +118,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             IImmutableDictionary<string, string> schema)
         {
             return new TransactionItem(
+                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -130,6 +138,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         #endregion
 
         #region Common properties
+        /// <summary>Name of the database in Kusto.</summary>
+        public string KustoDatabaseName { get; }
+
         /// <summary>Name of the table in Kusto.</summary>
         public string KustoTableName { get; }
 

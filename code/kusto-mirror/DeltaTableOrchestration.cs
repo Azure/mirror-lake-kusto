@@ -17,6 +17,8 @@ namespace Kusto.Mirror.ConsoleApp
             _deltaTableGateway = deltaTableGateway;
         }
 
+        public string KustoDatabaseName => _tableStatus.DatabaseName;
+        
         public string KustoTableName => _tableStatus.TableName;
 
         internal async Task RunAsync(CancellationToken ct)

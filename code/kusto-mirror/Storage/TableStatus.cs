@@ -72,6 +72,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             {
                 case TransactionItemAction.Add:
                     return TransactionItem.CreateAddItem(
+                        "DB MISSING",
                         (string)r["KustoTableName"],
                         (int)r["StartTxId"],
                         (int)r["EndTxId"],
@@ -84,6 +85,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                         (long)r["RecordCount"]);
                 case TransactionItemAction.Remove:
                     return TransactionItem.CreateRemoveItem(
+                        "DB MISSING",
                         (string)r["KustoTableName"],
                         (int)r["StartTxId"],
                         (int)r["EndTxId"],
@@ -95,6 +97,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                         (long)r["Size"]);
                 case TransactionItemAction.Schema:
                     return TransactionItem.CreateSchemaItem(
+                        "DB MISSING",
                         (string)r["KustoTableName"],
                         (int)r["StartTxId"],
                         (int)r["EndTxId"],
