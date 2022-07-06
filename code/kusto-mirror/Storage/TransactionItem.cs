@@ -1,10 +1,26 @@
-﻿using System.Collections.Immutable;
+﻿using CsvHelper;
+using CsvHelper.Configuration.Attributes;
+using System.Collections.Immutable;
+using System.Globalization;
+using System.Text;
 
 namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TransactionItem
     {
         #region Constructors
+        /// <summary>This should only be called by serializer.</summary>
+        public TransactionItem()
+        {
+            KustoDatabaseName = "MISSING DB";
+            KustoTableName = "MISSING TABLE";
+            StartTxId = -1;
+            EndTxId = -1;
+            Action = (TransactionItemAction)1000000;
+            State = (TransactionItemState)1000000;
+            Timestamp = DateTime.MinValue;
+        }
+
         private TransactionItem(
             string kustoDatabaseName,
             string kustoTableName,
@@ -131,59 +147,92 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         #region Common properties
         /// <summary>Name of the database in Kusto.</summary>
-        public string KustoDatabaseName { get; }
+        [Index(0)]
+        public string KustoDatabaseName { get; set; }
 
         /// <summary>Name of the table in Kusto.</summary>
-        public string KustoTableName { get; }
+        [Index(1)]
+        public string KustoTableName { get; set; }
 
         /// <summary>Start of the transaction range.</summary>
-        public int StartTxId { get; }
+        [Index(2)]
+        public int StartTxId { get; set; }
 
         /// <summary>End of the transaction range.</summary>
-        public int EndTxId { get; }
+        [Index(3)]
+        public int EndTxId { get; set; }
 
         /// <summary>Action to be done.</summary>
-        public TransactionItemAction Action { get; }
+        [Index(4)]
+        public TransactionItemAction Action { get; set; }
 
         /// <summary>State of the action (depends on <see cref="Action"/>).</summary>
-        public TransactionItemState State { get; }
+        [Index(5)]
+        public TransactionItemState State { get; set; }
 
         /// <summary>
         /// For schema:  creation time of the table.
         /// For add:  modification time.
         /// For remove:  deletion time.
         /// </summary>
-        public DateTime Timestamp { get; }
+        [Index(6)]
+        public DateTime Timestamp { get; set; }
         #endregion
 
         #region Add / Remove common properties
         /// <summary>Path to the blob to add / remove.</summary>
+        [Index(7)]
         public string? BlobPath { get; }
 
         /// <summary>Partition values for the data being added / removed.</summary>
+        [Index(8)]
         public IImmutableDictionary<string, string>? PartitionValues { get; }
-        
+
         /// <summary>Size in byte of the blob to add / remove.</summary>
+        [Index(9)]
         public long? Size { get; }
         #endregion
 
         #region Add only
         /// <summary>Number of records in the blob to add.</summary>
+        [Index(10)]
         public long? RecordCount { get; }
         #endregion
 
         #region Schema only
         /// <summary>Unique id of the delta table (in Spark).</summary>
+        [Index(11)]
         public Guid? DeltaTableId { get; }
 
         /// <summary>Unique id of the delta table (in Spark).</summary>
+        [Index(12)]
         public string? DeltaTableName { get; }
 
         /// <summary>List of the partition columns.</summary>
+        [Index(13)]
         public IImmutableList<string>? PartitionColumns { get; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
+        [Index(14)]
         public IImmutableDictionary<string, string>? Schema { get; set; }
         #endregion
+
+        public static string GetHeader()
+        {
+            using (var stream = new MemoryStream())
+            using (var writer = new StreamWriter(stream))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            {
+                csv.WriteHeader<TransactionItem>();
+                csv.Flush();
+                writer.Flush();
+                stream.Flush();
+
+                var buffer = stream.ToArray();
+                var text = ASCIIEncoding.UTF8.GetString(buffer);
+
+                return text;
+            }
+        }
     }
 }
