@@ -20,7 +20,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
         }
 
         public int StartTxId { get; }
-        
+
         public int EndTxId { get; }
 
         public TransactionItem? Metadata { get; }
@@ -28,6 +28,18 @@ namespace Kusto.Mirror.ConsoleApp.Database
         public IImmutableList<TransactionItem> Adds { get; }
 
         public IImmutableList<TransactionItem> Removes { get; }
+
+        public IEnumerable<TransactionItem> AllItems
+        {
+            get
+            {
+                var all = Adds.Concat(Removes);
+
+                return (Metadata != null)
+                    ? all.Prepend(Metadata)
+                    : all;
+            }
+        }
 
         public TransactionLog Coalesce(TransactionLog second)
         {

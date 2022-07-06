@@ -37,7 +37,7 @@ namespace Kusto.Mirror.ConsoleApp
 
                     if (newLogs.Any())
                     {
-                        await PersistNewBatchAsync(newLogs);
+                        await PersistNewBatchAsync(newLogs, ct);
                     }
                     else
                     {
@@ -47,11 +47,13 @@ namespace Kusto.Mirror.ConsoleApp
             }
         }
 
-        private static Task PersistNewBatchAsync(IImmutableList<TransactionLog> newLogs)
+        private async Task PersistNewBatchAsync(
+            IImmutableList<TransactionLog> newLogs,
+            CancellationToken ct)
         {
             var mergedLogs = TransactionLog.Coalesce(newLogs);
 
-            throw new NotImplementedException();
+            await _tableStatus.PersistNewBatchAsync(mergedLogs, ct);
         }
     }
 }

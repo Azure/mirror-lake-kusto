@@ -55,6 +55,24 @@ namespace Kusto.Mirror.ConsoleApp.Database
             }
         }
 
+        public async Task PersistNewBatchAsync(TransactionLog log, CancellationToken ct)
+        {
+            await IngestTransactionItemsAsync(log.AllItems, ct);
+        }
+
+        private async Task IngestTransactionItemsAsync(
+            IEnumerable<TransactionItem> allItems,
+            CancellationToken ct)
+        {
+            var itemsJson = JsonSerializer.Serialize(allItems);
+            var commandText = "";
+
+            await _database.ExecuteCommandAsync(
+                commandText,
+                p => 0,
+                ct);
+        }
+
         private TableStatus(
             DatabaseGateway database,
             string tableName,
