@@ -50,6 +50,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         internal async Task<IImmutableList<TransactionLog>> GetTransactionLogsAsync(
             int? fromTxId,
+            string kustoDatabaseName,
             string kustoTableName,
             CancellationToken ct)
         {
@@ -80,6 +81,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                     .Select(c => LoadTransactionBlobAsync(
                         c.TxId!.Value,
                         c.Name,
+                        kustoDatabaseName,
                         kustoTableName))
                     .ToImmutableArray();
 
@@ -95,6 +97,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         private async Task<TransactionLog> LoadTransactionBlobAsync(
             int txId,
+            string kustoDatabaseName,
             string blobName,
             string kustoTableName)
         {
@@ -104,7 +107,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 var downloadResult = await blobClient.DownloadContentAsync();
                 var blobText = downloadResult.Value.Content.ToString();
 
-                return TransactionLogEntry.LoadDeltaLog(txId, kustoTableName, blobText);
+                return TransactionLogEntry.LoadDeltaLog(
+                    txId,
+                    kustoDatabaseName,
+                    kustoTableName,
+                    blobText);
             }
             catch (Exception ex)
             {

@@ -34,6 +34,7 @@ namespace Kusto.Mirror.ConsoleApp
                     var currentTxId = _tableStatus.LastTxId;
                     var newLogs = await _deltaTableGateway.GetTransactionLogsAsync(
                         currentTxId + 1,
+                        KustoDatabaseName,
                         KustoTableName,
                         ct);
 

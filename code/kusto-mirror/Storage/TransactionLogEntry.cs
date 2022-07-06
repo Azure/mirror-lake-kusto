@@ -120,6 +120,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         #region Load log
         public static TransactionLog LoadDeltaLog(
             int txId,
+            string kustoDatabaseName,
             string kustoTableName,
             string blobText)
         {
@@ -142,13 +143,13 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             }
 
             var transactionMetadata = metadata.Any()
-                ? LoadMetadata(metadata.First(), txId, kustoTableName)
+                ? LoadMetadata(metadata.First(), txId, kustoDatabaseName, kustoTableName)
                 : null;
             var transactionAdds = add
-                .Select(a => LoadAdd(a, txId, kustoTableName))
+                .Select(a => LoadAdd(a, txId, kustoDatabaseName, kustoTableName))
                 .ToImmutableArray();
             var transactionRemoves = remove
-                .Select(a => LoadRemove(a, txId, kustoTableName))
+                .Select(a => LoadRemove(a, txId, kustoDatabaseName, kustoTableName))
                 .ToImmutableArray();
 
             return new TransactionLog(
@@ -160,6 +161,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private static TransactionItem LoadMetadata(
             MetadataData metadata,
             int txId,
+            string kustoDatabaseName,
             string kustoTableName)
         {
             if (metadata.Format == null || metadata.Format.Provider == null)
@@ -181,6 +183,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 .UtcDateTime;
 
             var item = TransactionItem.CreateSchemaItem(
+                kustoDatabaseName,
                 kustoTableName,
                 txId,
                 txId,
@@ -198,6 +201,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private static TransactionItem LoadAdd(
             AddData addEntry,
             int txId,
+            string kustoDatabaseName,
             string kustoTableName)
         {
             if (string.IsNullOrWhiteSpace(addEntry.Path))
@@ -213,6 +217,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 .UtcDateTime;
             var recordCount = ExtractRecordCount(addEntry.Stats);
             var item = TransactionItem.CreateAddItem(
+                kustoDatabaseName,
                 kustoTableName,
                 txId,
                 txId,
@@ -230,6 +235,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private static TransactionItem LoadRemove(
             RemoveData removeEntry,
             int txId,
+            string kustoDatabaseName,
             string kustoTableName)
         {
             if (string.IsNullOrWhiteSpace(removeEntry.Path))
@@ -244,6 +250,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 .FromUnixTimeMilliseconds(removeEntry.DeletionTimestamp)
                 .UtcDateTime;
             var item = TransactionItem.CreateRemoveItem(
+                kustoDatabaseName,
                 kustoTableName,
                 txId,
                 txId,
