@@ -1,4 +1,6 @@
-﻿using Kusto.Mirror.ConsoleApp.Database;
+﻿using Azure.Core;
+using Azure.Identity;
+using Kusto.Mirror.ConsoleApp.Database;
 using Kusto.Mirror.ConsoleApp.Parameters;
 using Kusto.Mirror.ConsoleApp.Storage;
 using System.Collections.Immutable;
@@ -28,6 +30,7 @@ namespace Kusto.Mirror.ConsoleApp
         {
             Trace.WriteLine("Initialize Kusto Cluster connections...");
 
+            var storageCredentials = CreateStorageCredentials(parameters.AuthenticationMode);
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.AuthenticationMode,
                 parameters.ClusterIngestionUri,
@@ -59,13 +62,31 @@ namespace Kusto.Mirror.ConsoleApp
                     .Select(t => new DeltaTableOrchestration(
                         t,
                         new DeltaTableGateway(
-                            parameters.AuthenticationMode,
+                            storageCredentials,
                             tableParameterizationMap[t.TableName].DeltaTableStorageUrl)));
 
                 orchestrations.AddRange(tableOrchestrations);
             }
 
             return new MirrorOrchestration(orchestrations);
+        }
+
+        private static TokenCredential CreateStorageCredentials(
+            AuthenticationMode authenticationMode)
+        {
+            switch (authenticationMode)
+            {
+                case AuthenticationMode.AppSecret:
+                    throw new NotSupportedException();
+                case AuthenticationMode.AzCli:
+                    return new AzureCliCredential();
+                case AuthenticationMode.Browser:
+                    return new InteractiveBrowserCredential();
+
+                default:
+                    throw new NotSupportedException(
+                        $"Unsupported authentication mode '{authenticationMode}'");
+            }
         }
 
         internal async Task RunAsync(CancellationToken ct)

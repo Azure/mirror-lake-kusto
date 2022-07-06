@@ -21,7 +21,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private readonly string _transactionFolderPrefix;
 
         public DeltaTableGateway(
-            AuthenticationMode authenticationMode,
+            TokenCredential storageCredentials,
             Uri deltaTableStorageUrl)
         {
             _deltaTableStorageUrl = deltaTableStorageUrl;
@@ -32,7 +32,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                     $"Url should contain the blob container:  {_deltaTableStorageUrl}");
             }
 
-            var credentials = CreateStorageCredentials(authenticationMode);
             var transactionLogsFolder = $"{_deltaTableStorageUrl}/_delta_log";
             var builder = new BlobUriBuilder(new Uri(transactionLogsFolder));
 
@@ -46,7 +45,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             //  Remove blob name to capture the container URI only
             builder.BlobName = string.Empty;
 
-            _blobContainerClient = new BlobContainerClient(builder.ToUri(), credentials);
+            _blobContainerClient = new BlobContainerClient(builder.ToUri(), storageCredentials);
         }
 
         internal async Task<IImmutableList<TransactionLog>> GetTransactionLogsAsync(
@@ -130,24 +129,5 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
             return null;
         }
-
-        private static TokenCredential CreateStorageCredentials(
-            AuthenticationMode authenticationMode)
-        {
-            switch (authenticationMode)
-            {
-                case AuthenticationMode.AppSecret:
-                    throw new NotSupportedException();
-                case AuthenticationMode.AzCli:
-                    return new AzureCliCredential();
-                case AuthenticationMode.Browser:
-                    return new InteractiveBrowserCredential();
-
-                default:
-                    throw new NotSupportedException(
-                        $"Unsupported authentication mode '{authenticationMode}'");
-            }
-        }
-
     }
 }
