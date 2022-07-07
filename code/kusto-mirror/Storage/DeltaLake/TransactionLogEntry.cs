@@ -240,10 +240,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             {
                 throw new ArgumentNullException(nameof(removeEntry.Path));
             }
-            if (removeEntry.PartitionValues == null)
-            {
-                throw new ArgumentNullException(nameof(removeEntry.PartitionValues));
-            }
+            //  Remove this check as Synapse Spark sometimes omit partition values on delete
+            //if (removeEntry.PartitionValues == null)
+            //{
+            //    throw new ArgumentNullException(nameof(removeEntry.PartitionValues));
+            //}
             var deletionTimestamp = DateTimeOffset
                 .FromUnixTimeMilliseconds(removeEntry.DeletionTimestamp)
                 .UtcDateTime;

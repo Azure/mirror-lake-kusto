@@ -176,7 +176,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             TransactionItemState state,
             DateTime timestamp,
             string blobPath,
-            IImmutableDictionary<string, string> partitionValues,
+            //  Synapse Spark sometimes omit those on remove
+            IImmutableDictionary<string, string>? partitionValues,
             long size)
         {
             return new TransactionItem(
