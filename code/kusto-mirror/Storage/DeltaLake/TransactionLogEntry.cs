@@ -261,7 +261,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
             return item;
         }
-        private static IImmutableDictionary<string, string> ExtractSchema(string schemaString)
+        private static IImmutableList<ColumnDefinition> ExtractSchema(string schemaString)
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var typeData =
@@ -286,7 +286,12 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
             var schema = typeData
                 .Fields
-                .ToImmutableDictionary(f => f.Name, f => GetKustoType(f.Type.ToLower()));
+                .Select(f => new ColumnDefinition
+                {
+                    ColumnName = f.Name,
+                    ColumnType = GetKustoType(f.Type.ToLower())
+                })
+                .ToImmutableArray();
 
             return schema;
         }

@@ -172,7 +172,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         {
             return items
                 .GroupBy(i => new TransactionItemKey(i.StartTxId, i.EndTxId, i.BlobPath))
-                .Select(g => g.First());
+                .Select(g => g.Last());
         }
 
         private ReadOnlyMemory<byte> ToBuffer(string headerText)

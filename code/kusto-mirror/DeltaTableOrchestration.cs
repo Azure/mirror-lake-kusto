@@ -8,6 +8,8 @@ namespace Kusto.Mirror.ConsoleApp
 {
     internal class DeltaTableOrchestration
     {
+        private const string BLOB_PATH_COLUMN = "KM_BlobPath";
+
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
         private readonly DatabaseGateway _databaseGateway;
@@ -65,10 +67,7 @@ namespace Kusto.Mirror.ConsoleApp
                 {
                     throw new InvalidOperationException("Transaction 0 should have meta data");
                 }
-                if (log.Metadata.State != TransactionItemState.Applied)
-                {
-                    await EnsureTableSchemaAsync(log.Metadata, ct);
-                }
+                await EnsureTableSchemaAsync(log.Metadata, ct);
             }
 
             throw new NotImplementedException();
@@ -76,17 +75,26 @@ namespace Kusto.Mirror.ConsoleApp
 
         private async Task EnsureTableSchemaAsync(TransactionItem metadata, CancellationToken ct)
         {
-            //var schemaText = metadata.Schema!
-            //    .
-            var createTableText = $".create-merge table {_tableStatus.TableName} ()";
+            if (metadata.State == TransactionItemState.ToBeApplied)
+            {
+                var schema = metadata.Schema!.Append(new ColumnDefinition
+                {
+                    ColumnName = BLOB_PATH_COLUMN,
+                    ColumnType = "string"
+                });
+                var columnsText = schema
+                    .Select(c => $"['{c.ColumnName}']:{c.ColumnType}");
+                var schemaText = string.Join(", ", columnsText);
+                var createTableText = $".create-merge table {_tableStatus.TableName} ({schemaText})";
+                var newMetadata = metadata.UpdateState(TransactionItemState.Applied);
 
-            Trace.WriteLine(
-                "Updating schema of Kusto table "
-                + $"'{_tableStatus.DatabaseName}.{_tableStatus.TableName}'");
+                Trace.WriteLine(
+                    "Updating schema of Kusto table "
+                    + $"'{_tableStatus.DatabaseName}.{_tableStatus.TableName}'");
 
-            await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
-
-            throw new NotImplementedException();
+                await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
+                await _tableStatus.PersistNewItemsAsync(new[] { newMetadata }, ct);
+            }
         }
 
         private async Task PersistNewBatchAsync(

@@ -9,6 +9,7 @@ using System.Text.Json;
 
 namespace Kusto.Mirror.ConsoleApp.Storage
 {
+    /// <summary>Leverages https://joshclose.github.io/CsvHelper/.</summary>
     internal class TransactionItem
     {
         public static string ExternalTableSchema =>
@@ -54,7 +55,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             }
         }
 
-        private class ListConverter : DefaultTypeConverter
+        private class ListConverter<T> : DefaultTypeConverter
         {
             public override object? ConvertFromString(
                 string text,
@@ -67,7 +68,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 }
                 else
                 {
-                    var array = JsonSerializer.Deserialize<IImmutableList<string>>(text);
+                    var array = JsonSerializer.Deserialize<IImmutableList<T>>(text);
 
                     if (array == null)
                     {
@@ -83,8 +84,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 IWriterRow row,
                 MemberMapData memberMapData)
             {
-                var list = (IImmutableList<string>)value;
-                var text = JsonSerializer.Serialize<IImmutableList<string>>(list);
+                var list = (IImmutableList<T>)value;
+                var text = JsonSerializer.Serialize<IImmutableList<T>>(list);
 
                 return text;
             }
@@ -119,7 +120,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             Guid? deltaTableId,
             string? deltaTableName,
             IImmutableList<string>? partitionColumns,
-            IImmutableDictionary<string, string>? schema)
+            IImmutableList<ColumnDefinition>? schema)
         {
             KustoDatabaseName = kustoDatabaseName;
             KustoTableName = kustoTableName;
@@ -208,7 +209,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             Guid deltaTableId,
             string deltaTableName,
             IImmutableList<string> partitionColumns,
-            IImmutableDictionary<string, string> schema)
+            IImmutableList<ColumnDefinition>? schema)
         {
             return new TransactionItem(
                 kustoDatabaseName,
@@ -295,14 +296,23 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         /// <summary>List of the partition columns.</summary>
         [Index(13)]
-        [TypeConverter(typeof(ListConverter))]
+        [TypeConverter(typeof(ListConverter<string>))]
         public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
         [Index(14)]
-        [TypeConverter(typeof(DictionaryConverter))]
-        public IImmutableDictionary<string, string>? Schema { get; set; }
+        [TypeConverter(typeof(ListConverter<ColumnDefinition>))]
+        public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion
+
+        public TransactionItem UpdateState(TransactionItemState applied)
+        {
+            var clone = Clone();
+
+            clone.State = applied;
+
+            return clone;
+        }
 
         public static ReadOnlyMemory<byte> GetCsvHeader()
         {
@@ -361,6 +371,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
                 return items.ToImmutableArray();
             }
+        }
+
+        private TransactionItem Clone()
+        {
+            return (TransactionItem)MemberwiseClone();
         }
     }
 }
