@@ -10,7 +10,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             IEnumerable<TransactionItem> transactionAdds,
             IEnumerable<TransactionItem> transactionRemoves)
         {
-            if(transactionMetadata == null
+            if (transactionMetadata == null
                 && !transactionAdds.Any()
                 && !transactionRemoves.Any())
             {
@@ -45,7 +45,26 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public TransactionLog Coalesce(TransactionLog second)
         {
-            throw new NotImplementedException();
+            if (second.Metadata != null)
+            {
+                throw new NotImplementedException();
+            }
+
+            var addIndex = Adds
+                .Select(r => r.BlobPath)
+                .ToImmutableHashSet();
+            var removeIndex = Removes
+                .Select(r => r.BlobPath)
+                .ToImmutableHashSet();
+            var remainingAdds = Adds
+                .Where(a => !removeIndex.Contains(a.BlobPath));
+            var remainingRemoves = Removes
+                .Where(a => !addIndex.Contains(a.BlobPath));
+
+            return new TransactionLog(
+                Metadata,
+                remainingAdds,
+                remainingRemoves);
         }
 
         public static TransactionLog Coalesce(IEnumerable<TransactionLog> txLogs)
