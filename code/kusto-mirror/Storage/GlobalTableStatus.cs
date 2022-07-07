@@ -120,9 +120,18 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public TableStatus GetSingleTableStatus(string database, string table)
         {
-            var tableItemIndex = _tableIndex[new TableKey(database, table)];
+            var tableKey = new TableKey(database, table);
+            TableItemIndex? tableItemIndex;
 
-            return new TableStatus(this, database, table, tableItemIndex.ItemIndex.Values);
+            //  We know only one thread at the time would do this
+            if (_tableIndex.TryGetValue(tableKey, out tableItemIndex))
+            {
+                return new TableStatus(this, database, table, tableItemIndex.ItemIndex.Values);
+            }
+            else
+            {
+                return new TableStatus(this, database, table, new TransactionItem[0]);
+            }
         }
 
         internal async Task PersistNewItemsAsync(
