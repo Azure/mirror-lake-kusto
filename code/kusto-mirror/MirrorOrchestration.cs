@@ -58,7 +58,9 @@ namespace Kusto.Mirror.ConsoleApp
             foreach (var db in databaseGroups)
             {
                 Trace.WriteLine($"Initialize Database '{db.Gateway.DatabaseName}' schemas...");
-                await db.Gateway.CreateMergeDatabaseObjectsAsync(ct);
+                await db.Gateway.CreateMergeDatabaseObjectsAsync(
+                    parameters.CheckpointBlobUrl,
+                    ct);
                 Trace.WriteLine($"Read Database '{db.Gateway.DatabaseName}' status...");
 
                 var tableNames = db.Tables.Select(t => t.KustoTable);

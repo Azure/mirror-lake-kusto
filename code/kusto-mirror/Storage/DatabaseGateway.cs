@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using Kusto.Mirror.ConsoleApp.Storage;
+using System.Collections.Immutable;
 using System.Data;
 
 namespace Kusto.Mirror.ConsoleApp.Database
@@ -39,13 +40,24 @@ namespace Kusto.Mirror.ConsoleApp.Database
                 ct);
         }
 
-        public Task CreateMergeDatabaseObjectsAsync(CancellationToken ct)
+        public async Task CreateMergeDatabaseObjectsAsync(
+            Uri checkpointBlobUrl,
+            CancellationToken ct)
         {
-            return Task.CompletedTask;
-            //await ExecuteCommandAsync(
-            //    TableStatus.CreateStatusTableCommandText,
-            //    r => 0,
-            //    ct);
+            var createStatusFunction = $@".create-or-alter function with
+(docstring = 'View on checkpoint blob', folder='Kusto Mirror')
+KM_DeltaStatus{{
+externaldata({TransactionItem.ExternalTableSchema})
+[
+   '{checkpointBlobUrl};impersonate'
+]
+with(format='csv')
+}}";
+
+            await ExecuteCommandAsync(
+                createStatusFunction,
+                r => 0,
+                ct);
         }
     }
 }

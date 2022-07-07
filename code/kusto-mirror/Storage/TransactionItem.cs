@@ -11,6 +11,12 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TransactionItem
     {
+        public static string ExternalTableSchema =>
+            "KustoDatabaseName:string,KustoTableName:string,StartTxId:int,EndTxId:int,"
+            + "Action:string,State:string,Timestamp:datetime,BlobPath:string,"
+            + "PartitionValues:dynamic,Size:long,RecordCount:long,DeltaTableId:string,"
+            + "DeltaTableName:string,PartitionColumns:dynamic,Schema:dynamic";
+
         #region Inner types
         private class DictionaryConverter : DefaultTypeConverter
         {
