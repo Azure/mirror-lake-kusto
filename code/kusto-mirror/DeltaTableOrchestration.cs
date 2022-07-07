@@ -29,6 +29,7 @@ namespace Kusto.Mirror.ConsoleApp
                 if (_tableStatus.IsBatchIncomplete)
                 {
                     throw new NotImplementedException();
+
                 }
                 else
                 {
