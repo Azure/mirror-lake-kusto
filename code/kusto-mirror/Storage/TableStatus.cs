@@ -37,6 +37,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             CancellationToken ct)
         {
             await _globalTableStatus.PersistNewItemsAsync(items, ct);
+            
+            //  Refresh the status
+            var newStatus = _globalTableStatus.GetSingleTableStatus(DatabaseName, TableName);
+
+            _statuses = newStatus._statuses;
         }
 
         public bool IsBatchIncomplete

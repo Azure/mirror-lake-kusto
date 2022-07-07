@@ -51,7 +51,7 @@ externaldata({TransactionItem.ExternalTableSchema})
 [
    '{checkpointBlobUrl};impersonate'
 ]
-with(format='csv')
+with(format='csv', ignoreFirstRecord=true)
 }}";
 
             await ExecuteCommandAsync(
