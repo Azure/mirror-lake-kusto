@@ -21,6 +21,14 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             Removes = transactionRemoves.ToImmutableArray();
         }
 
+        public TransactionLog(IEnumerable<TransactionItem> items)
+            : this(
+                  items.Where(i => i.Action == TransactionItemAction.Schema).FirstOrDefault(),
+                  items.Where(i => i.Action == TransactionItemAction.Add),
+                  items.Where(i => i.Action == TransactionItemAction.Remove))
+        {
+        }
+
         public string KustoDatabaseName => AllItems.First().KustoDatabaseName;
 
         public string KustoTableName => AllItems.First().KustoTableName;

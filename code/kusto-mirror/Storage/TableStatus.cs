@@ -32,26 +32,12 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public string TableName { get; }
 
-        public async Task PersistNewItemsAsync(
-            IEnumerable<TransactionItem> items,
-            CancellationToken ct)
-        {
-            await _globalTableStatus.PersistNewItemsAsync(items, ct);
-            
-            //  Refresh the status
-            var newStatus = _globalTableStatus.GetSingleTableStatus(DatabaseName, TableName);
-
-            _statuses = newStatus._statuses;
-        }
-
         public bool IsBatchIncomplete
         {
             get
             {
                 var isBatchIncomplete = _statuses
-                    .Where(s => s.State != TransactionItemState.Loaded
-                    || s.State != TransactionItemState.Deleted
-                    || s.State != TransactionItemState.Applied)
+                    .Where(s => IsComplete(s.State))
                     .Any();
 
                 return isBatchIncomplete;
@@ -68,6 +54,37 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
                 return lastTxId;
             }
+        }
+
+        public TransactionLog GetEarliestIncompleteBatch()
+        {
+            var startTxId = _statuses
+                .Where(s => IsComplete(s.State))
+                .Select(s => s.StartTxId)
+                .First();
+            var batchItems = _statuses
+                .Where(s => s.StartTxId == startTxId);
+
+            return new TransactionLog(batchItems);
+        }
+
+        public async Task PersistNewItemsAsync(
+            IEnumerable<TransactionItem> items,
+            CancellationToken ct)
+        {
+            await _globalTableStatus.PersistNewItemsAsync(items, ct);
+
+            //  Refresh the status
+            var newStatus = _globalTableStatus.GetSingleTableStatus(DatabaseName, TableName);
+
+            _statuses = newStatus._statuses;
+        }
+
+        private static bool IsComplete(TransactionItemState state)
+        {
+            return state != TransactionItemState.Loaded
+                || state != TransactionItemState.Deleted
+                || state != TransactionItemState.Applied;
         }
     }
 }

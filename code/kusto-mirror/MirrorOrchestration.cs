@@ -71,7 +71,8 @@ namespace Kusto.Mirror.ConsoleApp
                         globalTableStatus.GetSingleTableStatus(db.Gateway.DatabaseName, t),
                         new DeltaTableGateway(
                             storageCredentials,
-                            tableParameterizationMap[t].DeltaTableStorageUrl)));
+                            tableParameterizationMap[t].DeltaTableStorageUrl),
+                        db.Gateway));
 
                 orchestrations.AddRange(tableOrchestrations);
             }
