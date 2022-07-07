@@ -57,7 +57,7 @@ namespace Kusto.Mirror.ConsoleApp
         {
             var mergedLogs = TransactionLog.Coalesce(newLogs);
 
-            await _tableStatus.PersistNewBatchAsync(mergedLogs, ct);
+            await _tableStatus.PersistNewItemsAsync(mergedLogs.AllItems, ct);
         }
     }
 }

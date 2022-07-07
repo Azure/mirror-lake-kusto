@@ -32,11 +32,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public string TableName { get; }
 
-        public async Task PersistNewBatchAsync(TransactionLog log, CancellationToken ct)
+        public async Task PersistNewItemsAsync(
+            IEnumerable<TransactionItem> items,
+            CancellationToken ct)
         {
-            await _globalTableStatus.PersistNewBatchAsync(log, ct);
-
-            throw new NotImplementedException();
+            await _globalTableStatus.PersistNewItemsAsync(items, ct);
         }
 
         public bool IsBatchIncomplete
