@@ -9,6 +9,7 @@ namespace Kusto.Mirror.ConsoleApp
     internal class DeltaTableOrchestration
     {
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
+        private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
 
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
@@ -69,8 +70,83 @@ namespace Kusto.Mirror.ConsoleApp
                 }
                 await EnsureTableSchemaAsync(log.Metadata, ct);
             }
+            await EnsureStagingTableAsync(
+                log.AllItems.First().StartTxId,
+                log.Metadata?.Schema,
+                ct);
 
             throw new NotImplementedException();
+        }
+
+        private async Task EnsureStagingTableAsync(
+            int startTxId,
+            IImmutableList<ColumnDefinition>? schema,
+            CancellationToken ct)
+        {
+            var stagingTableName = $"KM_Staging_{_tableStatus.TableName}_{startTxId}";
+            var schemaText = await GetSchemaTextForStagingTableAsync(schema, ct);
+            var createTableText = $".create-merge table {stagingTableName} ({schemaText})";
+            //  Disable merge policy not to run after phantom extents
+            var mergePolicyText = @$".alter table {stagingTableName} policy merge
+```
+{{
+  ""AllowRebuild"": false,
+  ""AllowMerge"": false
+}}
+```";
+            //  Don't cache anything not to potentially overload the cache with big historical data
+            var cachePolicyText = $".alter table {stagingTableName} policy caching hot = 0d";
+            //  Don't delete anything in the table
+            var retentionPolicyText = @$".alter table {stagingTableName} policy retention 
+```
+{{
+  ""SoftDeletePeriod"": ""1000000000d""
+}}
+```";
+            var commandText = @$"
+.execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
+{createTableText}
+
+{mergePolicyText}
+
+{cachePolicyText}
+
+{retentionPolicyText}";
+
+            await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+        }
+
+        private async Task<string> GetSchemaTextForStagingTableAsync(
+            IImmutableList<ColumnDefinition>? schema,
+            CancellationToken ct)
+        {
+            if (schema != null)
+            {
+                var realSchema = schema.Append(new ColumnDefinition
+                {
+                    ColumnName = BLOB_PATH_COLUMN,
+                    ColumnType = "string"
+                }).Append(new ColumnDefinition
+                {
+                    ColumnName = BLOB_ROW_NUMBER_COLUMN,
+                    ColumnType = "long"
+                });
+                var columnsText = schema
+                    .Select(c => $"['{c.ColumnName}']:{c.ColumnType}");
+                var schemaText = string.Join(", ", columnsText);
+
+                return schemaText;
+            }
+            else
+            {
+                var tableSchema = await _databaseGateway.ExecuteCommandAsync(
+                    $".show table {_tableStatus.TableName} schema as csl",
+                    r => r["Schema"],
+                    ct);
+                var stagingTableSchema = $"{tableSchema},{BLOB_ROW_NUMBER_COLUMN}:long";
+
+                return stagingTableSchema;
+            }
         }
 
         private async Task EnsureTableSchemaAsync(TransactionItem metadata, CancellationToken ct)
