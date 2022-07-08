@@ -16,7 +16,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 {
     internal class DeltaTableGateway
     {
-        private readonly Uri _deltaTableStorageUrl;
         private readonly BlobContainerClient _blobContainerClient;
         private readonly string _transactionFolderPrefix;
 
@@ -24,15 +23,15 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             TokenCredential storageCredentials,
             Uri deltaTableStorageUrl)
         {
-            _deltaTableStorageUrl = deltaTableStorageUrl;
+            DeltaTableStorageUrl = deltaTableStorageUrl;
 
-            if (_deltaTableStorageUrl.Segments.Length < 2)
+            if (DeltaTableStorageUrl.Segments.Length < 2)
             {
                 throw new ArgumentOutOfRangeException(
-                    $"Url should contain the blob container:  {_deltaTableStorageUrl}");
+                    $"Url should contain the blob container:  {DeltaTableStorageUrl}");
             }
 
-            var transactionLogsFolder = $"{_deltaTableStorageUrl}/_delta_log";
+            var transactionLogsFolder = $"{DeltaTableStorageUrl}/_delta_log";
             var builder = new BlobUriBuilder(new Uri(transactionLogsFolder));
 
             //  Enforce blob storage API
@@ -47,6 +46,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
             _blobContainerClient = new BlobContainerClient(builder.ToUri(), storageCredentials);
         }
+
+        public Uri DeltaTableStorageUrl { get; }
 
         internal async Task<IImmutableList<TransactionLog>> GetTransactionLogsAsync(
             int? fromTxId,

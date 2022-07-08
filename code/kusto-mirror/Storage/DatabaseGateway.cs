@@ -1,4 +1,7 @@
-﻿using Kusto.Mirror.ConsoleApp.Storage;
+﻿using Kusto.Data.Common;
+using Kusto.Data.Ingestion;
+using Kusto.Ingest;
+using Kusto.Mirror.ConsoleApp.Storage;
 using System.Collections.Immutable;
 using System.Data;
 
@@ -58,6 +61,41 @@ with(format='csv', ignoreFirstRecord=true)
                 createStatusFunction,
                 r => 0,
                 ct);
+        }
+
+        public async Task QueueIngestionAsync(
+            Uri blobUrl,
+            string tableName,
+            DataSourceFormat format,
+            IEnumerable<ColumnMapping> ingestionMappings)
+        {
+            var properties = new KustoQueuedIngestionProperties(DatabaseName, tableName)
+            {
+                Format = format,
+                IngestionMapping = new IngestionMapping()
+                {
+                    IngestionMappings = ingestionMappings,
+                    IngestionMappingKind = TranslateMappingKind(format)
+                }
+            };
+
+            await _clusterGateway.IngestFromStorageAsync(blobUrl, properties);
+        }
+
+        private static IngestionMappingKind TranslateMappingKind(DataSourceFormat format)
+        {
+            switch (format)
+            {
+                case DataSourceFormat.csv:
+                    return IngestionMappingKind.Csv;
+                case DataSourceFormat.parquet:
+                    return IngestionMappingKind.Parquet;
+                case DataSourceFormat.json:
+                    return IngestionMappingKind.Json;
+
+                default:
+                    throw new NotSupportedException($"Format '{format}' isn't supported");
+            }
         }
     }
 }

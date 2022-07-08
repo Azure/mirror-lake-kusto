@@ -1,6 +1,7 @@
 ﻿using Kusto.Data;
 using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
+using Kusto.Ingest;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -15,6 +16,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
     {
         private readonly ICslQueryProvider _queryProvider;
         private readonly ICslAdminProvider _commandProvider;
+        private readonly IKustoQueuedIngestClient _ingestionProvider;
         private readonly Uri _clusterQueryUri;
         private readonly string _application;
         private readonly IImmutableList<KeyValuePair<string, object>>? _requestOptions;
@@ -51,6 +53,8 @@ namespace Kusto.Mirror.ConsoleApp.Database
 
             _queryProvider = KustoClientFactory.CreateCslQueryProvider(queryStringBuilder);
             _commandProvider = KustoClientFactory.CreateCslCmAdminProvider(queryStringBuilder);
+            _ingestionProvider = KustoIngestFactory.CreateQueuedIngestClient(
+                ingestionStringBuilder);
             _clusterQueryUri = clusterQueryUri;
             if (requestDescription != null)
             {
@@ -64,6 +68,24 @@ namespace Kusto.Mirror.ConsoleApp.Database
             else
             {
                 _application = string.Empty;
+            }
+        }
+
+        internal async Task IngestFromStorageAsync(
+            Uri blobUrl,
+            KustoQueuedIngestionProperties properties)
+        {
+            var result = await _ingestionProvider.IngestFromStorageAsync(
+                blobUrl.ToString(),
+                properties);
+            var failureStatus = result.GetIngestionStatusCollection().First();
+
+            if (failureStatus.Status != Status.Queued)
+            {
+                throw new MirrorException(
+                    $"Blob '{blobUrl}' hasn't queued ; state '{failureStatus.Status}', "
+                    + $"failure status '{failureStatus.FailureStatus}' & "
+                    + $"error code '{failureStatus.ErrorCode}'");
             }
         }
 
@@ -96,7 +118,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
             Func<IDataRecord, T> projection,
             CancellationToken ct)
         {
-            using(var reader = await _commandProvider.ExecuteControlCommandAsync(
+            using (var reader = await _commandProvider.ExecuteControlCommandAsync(
                 database,
                 commandText,
                 _requestOptions != null
