@@ -70,15 +70,22 @@ namespace Kusto.Mirror.ConsoleApp
                 }
                 await EnsureTableSchemaAsync(log.Metadata, ct);
             }
-            await EnsureStagingTableAsync(
+            var stagingTable = await EnsureStagingTableAsync(
                 log.AllItems.First().StartTxId,
                 log.Metadata?.Schema,
                 ct);
 
+            await EnsureAllQueuedAsync(log.Adds, ct);
+        }
+
+        private Task EnsureAllQueuedAsync(
+            IEnumerable<TransactionItem> adds,
+            CancellationToken ct)
+        {
             throw new NotImplementedException();
         }
 
-        private async Task EnsureStagingTableAsync(
+        private async Task<string> EnsureStagingTableAsync(
             int startTxId,
             IImmutableList<ColumnDefinition>? schema,
             CancellationToken ct)
@@ -100,22 +107,33 @@ namespace Kusto.Mirror.ConsoleApp
             var retentionPolicyText = @$".alter table {stagingTableName} policy retention 
 ```
 {{
-  ""SoftDeletePeriod"": ""1000000000d""
+  ""SoftDeletePeriod"": ""10000000:0:0:0""
 }}
 ```";
             //  Staging table:  shouldn't be queried by normal users
             var restrictedViewPolicyText =
                 $".alter table {stagingTableName} policy restricted_view_access true";
+            var ingestionBatchingPolicyText = @$".alter table {stagingTableName} policy ingestionbatching
+```
+{{
+  ""MaximumBatchingTimeSpan"":""0:0:10""
+}}
+```";
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
 
+{ingestionBatchingPolicyText}
+
+{retentionPolicyText}
+
 {mergePolicyText}";
             //{cachePolicyText}
-            //{retentionPolicyText}
             //{restrictedViewPolicyText}";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+
+            return stagingTableName;
         }
 
         private async Task<string> GetSchemaTextForStagingTableAsync(
