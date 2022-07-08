@@ -103,15 +103,17 @@ namespace Kusto.Mirror.ConsoleApp
   ""SoftDeletePeriod"": ""1000000000d""
 }}
 ```";
+            //  Staging table:  shouldn't be queried by normal users
+            var restrictedViewPolicyText =
+                $".alter table {stagingTableName} policy restricted_view_access true";
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
 
-{mergePolicyText}
-
-{cachePolicyText}
-
-{retentionPolicyText}";
+{mergePolicyText}";
+            //{cachePolicyText}
+            //{retentionPolicyText}
+            //{restrictedViewPolicyText}";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
         }
