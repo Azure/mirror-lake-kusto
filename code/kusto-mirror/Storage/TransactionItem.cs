@@ -15,7 +15,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public static string ExternalTableSchema =>
             "KustoDatabaseName:string,KustoTableName:string,StartTxId:int,EndTxId:int,"
             + "Action:string,State:string,Timestamp:datetime,BlobPath:string,"
-            + "PartitionValues:dynamic,Size:long,RecordCount:long,DeltaTableId:string,"
+            + "PartitionValues:dynamic,Size:long,RecordCount:long,ExtentId:string,"
+            + "DeltaTableId:string,"
             + "DeltaTableName:string,PartitionColumns:dynamic,Schema:dynamic";
 
         #region Inner types
@@ -283,24 +284,27 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         /// <summary>Number of records in the blob to add.</summary>
         [Index(10)]
         public long? RecordCount { get; set; }
+
+        [Index(11)]
+        public string? ExtentId { get; set; }
         #endregion
 
         #region Schema only
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(11)]
+        [Index(12)]
         public Guid? DeltaTableId { get; set; }
 
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(12)]
+        [Index(13)]
         public string? DeltaTableName { get; set; }
 
         /// <summary>List of the partition columns.</summary>
-        [Index(13)]
+        [Index(14)]
         [TypeConverter(typeof(ListConverter<string>))]
         public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
-        [Index(14)]
+        [Index(15)]
         [TypeConverter(typeof(ListConverter<ColumnDefinition>))]
         public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion

@@ -97,9 +97,47 @@ namespace Kusto.Mirror.ConsoleApp
             throw new NotImplementedException();
         }
 
-        private Task EnsureAllLoadedAsync(
+        private async Task EnsureAllLoadedAsync(
             TableDefinition stagingTable,
             TransactionLog log,
+            CancellationToken ct)
+        {
+            var extentIds = log.Adds
+                .Select(i => i.ExtentId!)
+                .Distinct()
+                .ToImmutableArray();
+            var blobPathToRemove = log.Removes
+                .Select(i => i.BlobPath!)
+                .Distinct()
+                .ToImmutableArray();
+            var removeBlobPathsTask = RemoveBlobPathsAsync(blobPathToRemove, ct);
+
+            if (log.Metadata != null)
+            {
+                await EnsureTableSchemaAsync(log.Metadata, ct);
+            }
+
+            await LoadExtentsAsync(stagingTable, extentIds, ct);
+            await removeBlobPathsTask;
+
+            var newAdded = log.Adds
+                .Select(item => item.UpdateState(TransactionItemState.Loaded));
+            var newRemoved = log.Removes
+                .Select(item => item.UpdateState(TransactionItemState.Deleted));
+
+            await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
+        }
+
+        private Task LoadExtentsAsync(
+            TableDefinition stagingTable,
+            IEnumerable<string> extentIds,
+            CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
+
+        private Task RemoveBlobPathsAsync(
+            IEnumerable<string> blobPathToRemove,
             CancellationToken ct)
         {
             throw new NotImplementedException();
