@@ -75,14 +75,42 @@ namespace Kusto.Mirror.ConsoleApp
                     throw new InvalidOperationException("Transaction 0 should have meta data");
                 }
                 await EnsureTableSchemaAsync(log.Metadata, ct);
+                log = _tableStatus.GetEarliestIncompleteBatch();
             }
             var targetTable = await GetTableSchemaAsync(log.Metadata, ct);
             var stagingTable = GetStagingTableSchema(stagingTableName, targetTable);
 
             await EnsureStagingTableAsync(stagingTable, ct);
             await EnsureAllQueuedAsync(stagingTable, log.Adds, ct);
+            log = _tableStatus.GetEarliestIncompleteBatch();
+            await EnsureAllStagedAsync(stagingTable, log.Adds, ct);
+            log = _tableStatus.GetEarliestIncompleteBatch();
+            await EnsureAllLoadedAsync(stagingTable, log, ct);
+            await DropStagingTableAsync(stagingTable, ct);
+        }
 
+        private Task EnsureAllStagedAsync(
+            TableDefinition stagingTable,
+            IEnumerable<TransactionItem> adds,
+            CancellationToken ct)
+        {
             throw new NotImplementedException();
+        }
+
+        private Task EnsureAllLoadedAsync(
+            TableDefinition stagingTable,
+            TransactionLog log,
+            CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
+
+        private async Task DropStagingTableAsync(
+            TableDefinition stagingTable,
+            CancellationToken ct)
+        {
+            var commandText = $".drop table {stagingTable.Name}";
+            await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
         }
 
         private async Task<TableDefinition> GetTableSchemaAsync(
@@ -194,7 +222,7 @@ namespace Kusto.Mirror.ConsoleApp
                 var queueTasks = toBeAdded
                     .Select(async item =>
                     {
-                        await QueueItemAsync(item, stagingTable, ingestionMappings, ct);
+                        await QueueItemAsync(stagingTable, item, ingestionMappings, ct);
                     })
                     .ToImmutableArray();
                 var newItems = toBeAdded
@@ -206,8 +234,8 @@ namespace Kusto.Mirror.ConsoleApp
         }
 
         private async Task QueueItemAsync(
-            TransactionItem item,
             TableDefinition stagingTable,
+            TransactionItem item,
             IEnumerable<ColumnMapping> ingestionMappings,
             CancellationToken ct)
         {
