@@ -5,6 +5,8 @@ VisualStudioVersion = 17.2.32602.215
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "kusto-mirror", "kusto-mirror\kusto-mirror.csproj", "{BC4DC546-3B9E-442B-90AA-EA3483CCB8C0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoMirrorTest", "KustoMirrorTest\KustoMirrorTest.csproj", "{182B9F05-9AA9-4E1A-BC39-9212473C2025}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{BC4DC546-3B9E-442B-90AA-EA3483CCB8C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BC4DC546-3B9E-442B-90AA-EA3483CCB8C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BC4DC546-3B9E-442B-90AA-EA3483CCB8C0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{182B9F05-9AA9-4E1A-BC39-9212473C2025}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{182B9F05-9AA9-4E1A-BC39-9212473C2025}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{182B9F05-9AA9-4E1A-BC39-9212473C2025}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{182B9F05-9AA9-4E1A-BC39-9212473C2025}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
