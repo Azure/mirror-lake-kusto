@@ -70,9 +70,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public async Task PersistNewItemsAsync(
             IEnumerable<TransactionItem> items,
+            bool doCloseTransaction,
             CancellationToken ct)
         {
-            await _globalTableStatus.PersistNewItemsAsync(items, ct);
+            await _globalTableStatus.PersistNewItemsAsync(items, false, ct);
 
             //  Refresh the status
             var newStatus = _globalTableStatus.GetSingleTableStatus(DatabaseName, TableName);

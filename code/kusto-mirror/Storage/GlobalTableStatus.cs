@@ -136,8 +136,13 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         internal async Task PersistNewItemsAsync(
             IEnumerable<TransactionItem> items,
+            bool doCloseTransaction,
             CancellationToken ct)
         {
+            if(doCloseTransaction)
+            {
+                throw new NotImplementedException();
+            }
             var itemsContent = TransactionItem.ToCsv(items);
             var tx = new BookmarkTransaction(new[] { itemsContent }, null, null);
             var result = await _bookmarkGateway.ApplyTransactionAsync(tx, ct);
@@ -150,20 +155,18 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             //  We know only one thread at the time would do this
             if (!_tableIndex.TryGetValue(tableKey, out tableItemIndex))
             {
-                _tableIndex[tableKey] = new TableItemIndex(newBlockId, items);
+                tableItemIndex = new TableItemIndex(newBlockId, items);
+                _tableIndex[tableKey] = tableItemIndex;
             }
-            else
-            {
-                tableItemIndex.BlockIds.Add(newBlockId);
-                foreach (var i in items)
-                {   //  Keep latest added in memory
-                    var transactionItemKey = new TransactionItemKey(
-                        i.StartTxId,
-                        i.EndTxId,
-                        i.BlobPath);
+            tableItemIndex.BlockIds.Add(newBlockId);
+            foreach (var i in items)
+            {   //  Keep latest added in memory
+                var transactionItemKey = new TransactionItemKey(
+                    i.StartTxId,
+                    i.EndTxId,
+                    i.BlobPath);
 
-                    tableItemIndex.ItemIndex[transactionItemKey] = i;
-                }
+                tableItemIndex.ItemIndex[transactionItemKey] = i;
             }
         }
 
