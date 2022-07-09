@@ -67,7 +67,8 @@ with(format='csv', ignoreFirstRecord=true)
             Uri blobUrl,
             string tableName,
             DataSourceFormat format,
-            IEnumerable<ColumnMapping> ingestionMappings)
+            IEnumerable<ColumnMapping> ingestionMappings,
+            CancellationToken ct)
         {
             var properties = new KustoQueuedIngestionProperties(DatabaseName, tableName)
             {
@@ -79,7 +80,7 @@ with(format='csv', ignoreFirstRecord=true)
                 }
             };
 
-            await _clusterGateway.IngestFromStorageAsync(blobUrl, properties);
+            await _clusterGateway.IngestFromStorageAsync(blobUrl, properties, ct);
         }
 
         private static IngestionMappingKind TranslateMappingKind(DataSourceFormat format)

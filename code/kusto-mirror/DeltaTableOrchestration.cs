@@ -190,44 +190,66 @@ namespace Kusto.Mirror.ConsoleApp
 
             if (toBeAdded.Any())
             {
-                var location =
-                    new Dictionary<string, string>() { { "Transform", "SourceLocation" } };
-                var lineNumber =
-                    new Dictionary<string, string>() { { "Transform", "SourceLineNumber" } };
-                var ingestionMappings = stagingTable
-                    .Columns
-                    .Select(c => new ColumnMapping()
+                var ingestionMappings = CreateIngestionMappings(stagingTable);
+                var queueTasks = toBeAdded
+                    .Select(async item =>
                     {
-                        ColumnName = c.ColumnName,
-                        ColumnType = c.ColumnType,
-                        Properties = c.ColumnName== BLOB_PATH_COLUMN
-                        ? location
-                        : c.ColumnName == BLOB_ROW_NUMBER_COLUMN
-                        ? lineNumber
-                        : new Dictionary<string, string>()
+                        await QueueItemAsync(item, stagingTable, ingestionMappings, ct);
                     })
                     .ToImmutableArray();
+                var newItems = toBeAdded
+                    .Select(item => item.UpdateState(TransactionItemState.QueuedForIngestion));
 
-                foreach (var item in toBeAdded)
-                {
-                    if (item.BlobPath == null)
-                    {
-                        throw new InvalidOperationException(
-                            $"{nameof(item.BlobPath)} shouldn't be null here");
-                    }
-                    var fullBlobath = Path.Combine(
-                        $"{_deltaTableGateway.DeltaTableStorageUrl}/",
-                        item.BlobPath);
-
-                    await _databaseGateway.QueueIngestionAsync(
-                        new Uri(fullBlobath),
-                        stagingTable.Name,
-                        DataSourceFormat.parquet,
-                        ingestionMappings);
-                }
-
-                throw new NotImplementedException();
+                await Task.WhenAll(queueTasks);
+                await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }
+        }
+
+        private async Task QueueItemAsync(
+            TransactionItem item,
+            TableDefinition stagingTable,
+            IEnumerable<ColumnMapping> ingestionMappings,
+            CancellationToken ct)
+        {
+            if (item.BlobPath == null)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(item.BlobPath)} shouldn't be null here");
+            }
+            var fullBlobath = Path.Combine(
+                $"{_deltaTableGateway.DeltaTableStorageUrl}/",
+                item.BlobPath);
+
+            await _databaseGateway.QueueIngestionAsync(
+                new Uri(fullBlobath),
+                stagingTable.Name,
+                DataSourceFormat.parquet,
+                ingestionMappings,
+                ct);
+        }
+
+        private static ImmutableArray<ColumnMapping> CreateIngestionMappings(
+            TableDefinition stagingTable)
+        {
+            var location =
+                new Dictionary<string, string>() { { "Transform", "SourceLocation" } };
+            var lineNumber =
+                new Dictionary<string, string>() { { "Transform", "SourceLineNumber" } };
+            var ingestionMappings = stagingTable
+                .Columns
+                .Select(c => new ColumnMapping()
+                {
+                    ColumnName = c.ColumnName,
+                    ColumnType = c.ColumnType,
+                    Properties = c.ColumnName == BLOB_PATH_COLUMN
+                    ? location
+                    : c.ColumnName == BLOB_ROW_NUMBER_COLUMN
+                    ? lineNumber
+                    : new Dictionary<string, string>()
+                })
+                .ToImmutableArray();
+
+            return ingestionMappings;
         }
 
         private async Task EnsureTableSchemaAsync(TransactionItem metadata, CancellationToken ct)

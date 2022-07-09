@@ -73,7 +73,8 @@ namespace Kusto.Mirror.ConsoleApp.Database
 
         internal async Task IngestFromStorageAsync(
             Uri blobUrl,
-            KustoQueuedIngestionProperties properties)
+            KustoQueuedIngestionProperties properties,
+            CancellationToken ct)
         {
             var result = await _ingestionProvider.IngestFromStorageAsync(
                 blobUrl.ToString(),
