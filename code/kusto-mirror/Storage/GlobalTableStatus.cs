@@ -136,13 +136,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         internal async Task PersistNewItemsAsync(
             IEnumerable<TransactionItem> items,
-            bool doCloseTransaction,
             CancellationToken ct)
         {
-            if(doCloseTransaction)
-            {
-                throw new NotImplementedException();
-            }
             var itemsContent = TransactionItem.ToCsv(items);
             var tx = new BookmarkTransaction(new[] { itemsContent }, null, null);
             var result = await _bookmarkGateway.ApplyTransactionAsync(tx, ct);
@@ -175,7 +170,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         {
             return items
                 .GroupBy(i => new TransactionItemKey(i.StartTxId, i.EndTxId, i.BlobPath))
-                .Select(g => g.Last());
+                .OrderBy(g => g.OrderByDescending(i => i.MirrorTimestamp))
+                .Select(list => list.First());
         }
 
         private ReadOnlyMemory<byte> ToBuffer(string headerText)

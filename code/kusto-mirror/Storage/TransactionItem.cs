@@ -14,7 +14,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     {
         public static string ExternalTableSchema =>
             "KustoDatabaseName:string,KustoTableName:string,StartTxId:int,EndTxId:int,"
-            + "Action:string,State:string,Timestamp:datetime,BlobPath:string,"
+            + "Action:string,State:string,DeltaTimestamp:datetime,MirrorTimestamp:datetime,"
+            + "BlobPath:string,"
             + "PartitionValues:dynamic,Size:long,RecordCount:long,ExtentId:string,"
             + "DeltaTableId:string,"
             + "DeltaTableName:string,PartitionColumns:dynamic,Schema:dynamic";
@@ -103,7 +104,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             EndTxId = -1;
             Action = (TransactionItemAction)1000000;
             State = (TransactionItemState)1000000;
-            Timestamp = DateTime.MinValue;
+            DeltaTimestamp = DateTime.MinValue;
+            MirrorTimestamp = DateTime.MinValue;
         }
 
         private TransactionItem(
@@ -129,7 +131,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             EndTxId = endTxId;
             Action = action;
             State = state;
-            Timestamp = timestamp;
+            DeltaTimestamp = timestamp;
+            MirrorTimestamp = DateTime.UtcNow;
             BlobPath = blobPath;
             PartitionValues = partitionValues;
             Size = size;
@@ -262,7 +265,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         /// For remove:  deletion time.
         /// </summary>
         [Index(6)]
-        public DateTime Timestamp { get; set; }
+        public DateTime DeltaTimestamp { get; set; }
+
+        /// <summary>Time this item was created.</summary>
+        [Index(6)]
+        public DateTime MirrorTimestamp { get; set; }
         #endregion
 
         #region Add / Remove common properties
@@ -314,6 +321,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             var clone = Clone();
 
             clone.State = applied;
+            clone.MirrorTimestamp = DateTime.UtcNow;
 
             return clone;
         }

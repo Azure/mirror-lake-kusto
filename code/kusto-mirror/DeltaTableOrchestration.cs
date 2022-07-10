@@ -125,7 +125,7 @@ namespace Kusto.Mirror.ConsoleApp
             var newRemoved = log.Removes
                 .Select(item => item.UpdateState(TransactionItemState.Deleted));
 
-            await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), true, ct);
+            await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
         }
 
         private Task LoadExtentsAsync(
@@ -267,7 +267,7 @@ namespace Kusto.Mirror.ConsoleApp
                     .Select(item => item.UpdateState(TransactionItemState.QueuedForIngestion));
 
                 await Task.WhenAll(queueTasks);
-                await _tableStatus.PersistNewItemsAsync(newItems, false, ct);
+                await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }
         }
 
@@ -338,7 +338,7 @@ namespace Kusto.Mirror.ConsoleApp
                     + $"'{_tableStatus.DatabaseName}.{_tableStatus.TableName}'");
 
                 await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
-                await _tableStatus.PersistNewItemsAsync(new[] { newMetadata }, false, ct);
+                await _tableStatus.PersistNewItemsAsync(new[] { newMetadata }, ct);
             }
         }
 
@@ -348,7 +348,7 @@ namespace Kusto.Mirror.ConsoleApp
         {
             var mergedLogs = TransactionLog.Coalesce(newLogs);
 
-            await _tableStatus.PersistNewItemsAsync(mergedLogs.AllItems, false, ct);
+            await _tableStatus.PersistNewItemsAsync(mergedLogs.AllItems, ct);
         }
     }
 }
