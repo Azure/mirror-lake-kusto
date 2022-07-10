@@ -69,7 +69,7 @@ with(format='csv', ignoreFirstRecord=true)
 (docstring = 'Latest state view on checkpoint blob', folder='Kusto Mirror')
 {STATUS_LATEST_VIEW_NAME}{{
 {STATUS_VIEW_NAME}
-| summarize arg_max(MirrorTimestamp, *) by KustoDatabaseName, KustoTableName, StartTxId, Action, State, BlobPath
+| summarize arg_max(MirrorTimestamp, *) by KustoDatabaseName, KustoTableName, StartTxId, Action, BlobPath
 | order by KustoDatabaseName asc, KustoTableName asc, StartTxId asc, Action asc, BlobPath asc
 | project {columnListText}
 }}";
