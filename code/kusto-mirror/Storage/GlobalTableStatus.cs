@@ -16,18 +16,13 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         #region Inner Types
         private record TableKey(string Database, string Table);
 
-        private record TransactionItemKey(
-            int StartTxId,
-            int EndTxId,
-            string? BlobPath);
-
         private class TableItemIndex
         {
             public TableItemIndex(int initialBlockId, IEnumerable<TransactionItem> initialItems)
             {
                 var pairs = initialItems
                     .Select(i => KeyValuePair.Create(
-                        new TransactionItemKey(i.StartTxId, i.EndTxId, i.BlobPath),
+                        new TransactionItemKey(i.StartTxId, i.EndTxId, i.Action, i.BlobPath),
                         i));
 
                 BlockIds = new List<int>(new[] { initialBlockId });
@@ -72,7 +67,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                     {
                         Content = TransactionItem.ToCsv(g),
                         //  De-duplicate items
-                        Items = DeduplicateTransactionItems(g)
+                        Items = g
                     })
                     .ToImmutableList();
                 var bookmarkTx = new BookmarkTransaction(
@@ -159,19 +154,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 var transactionItemKey = new TransactionItemKey(
                     i.StartTxId,
                     i.EndTxId,
+                    i.Action,
                     i.BlobPath);
 
                 tableItemIndex.ItemIndex[transactionItemKey] = i;
             }
-        }
-
-        private static IEnumerable<TransactionItem> DeduplicateTransactionItems(
-            IEnumerable<TransactionItem> items)
-        {
-            return items
-                .GroupBy(i => new TransactionItemKey(i.StartTxId, i.EndTxId, i.BlobPath))
-                .OrderBy(g => g.OrderByDescending(i => i.MirrorTimestamp))
-                .Select(list => list.First());
         }
 
         private ReadOnlyMemory<byte> ToBuffer(string headerText)
