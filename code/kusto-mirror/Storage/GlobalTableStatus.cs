@@ -16,6 +16,12 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         #region Inner Types
         private record TableKey(string Database, string Table);
 
+        private record TransactionItemKey(
+            int StartTxId,
+            int EndTxId,
+            TransactionItemAction Action,
+            string? BlobPath);
+
         private class TableItemIndex
         {
             public TableItemIndex(int initialBlockId, IEnumerable<TransactionItem> initialItems)
@@ -105,8 +111,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             //  Zip the ids with the data and index it
             var tableItemsList =
                 blockIds.Zip(itemBlocks, (id, items) => KeyValuePair.Create(
-                    new TableKey(items.First().KustoDatabaseName, items.First().KustoTableName),
-                    new TableItemIndex(id, items)));
+                    new TableKey(
+                        items.First().KustoDatabaseName,
+                        items.First().KustoTableName),
+                    new TableItemIndex(id, KeepLatestForEachKeyOnly(items))));
 
             //  Then index each of those per table / db
             _tableIndex = new ConcurrentDictionary<TableKey, TableItemIndex>(tableItemsList);
@@ -164,6 +172,42 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private ReadOnlyMemory<byte> ToBuffer(string headerText)
         {
             return new ReadOnlyMemory<byte>(ASCIIEncoding.UTF8.GetBytes(headerText));
+        }
+
+        private static IEnumerable<TransactionItem> KeepLatestForEachKeyOnly(
+            IEnumerable<TransactionItem> items)
+        {
+            var latest = items
+                .GroupBy(i => new TransactionItemKey(
+                    i.StartTxId,
+                    i.EndTxId,
+                    i.Action,
+                    i.BlobPath))
+                .Select(g => KeepLatestOnly(g));
+
+            return latest;
+        }
+
+        private static TransactionItem KeepLatestOnly(IEnumerable<TransactionItem> items)
+        {
+            TransactionItem? latest = null;
+            DateTime? latestMirrorTimestamp = null;
+
+            foreach (var item in items)
+            {
+                if (latestMirrorTimestamp == null
+                    || item.MirrorTimestamp > latestMirrorTimestamp)
+                {
+                    latestMirrorTimestamp = item.MirrorTimestamp;
+                    latest = item;
+                }
+            }
+            if (latest == null)
+            {
+                throw new ArgumentNullException(nameof(items));
+            }
+
+            return latest;
         }
     }
 }

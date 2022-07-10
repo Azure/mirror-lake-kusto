@@ -28,13 +28,14 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 IReaderRow row,
                 MemberMapData memberMapData)
             {
-                if (text == "null")
+                if (string.IsNullOrWhiteSpace(text))
                 {
-                    return null;
+                    return ImmutableDictionary<string, string>.Empty;
                 }
                 else
                 {
-                    var map = JsonSerializer.Deserialize<IImmutableDictionary<string, string>>(text);
+                    var map =
+                        JsonSerializer.Deserialize<IImmutableDictionary<string, string>>(text);
 
                     if (map == null)
                     {
@@ -51,9 +52,18 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 MemberMapData memberMapData)
             {
                 var map = (IImmutableDictionary<string, string>)value;
-                var text = JsonSerializer.Serialize<IImmutableDictionary<string, string>>(map);
 
-                return text;
+                if (map != null)
+                {
+                    var text =
+                        JsonSerializer.Serialize<IImmutableDictionary<string, string>>(map);
+
+                    return text;
+                }
+                else
+                {
+                    return string.Empty;
+                }
             }
         }
 
@@ -64,9 +74,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 IReaderRow row,
                 MemberMapData memberMapData)
             {
-                if (text == "null")
+                if (string.IsNullOrWhiteSpace(text))
                 {
-                    return null;
+                    return ImmutableArray<T>.Empty;
                 }
                 else
                 {
@@ -87,9 +97,17 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 MemberMapData memberMapData)
             {
                 var list = (IImmutableList<T>)value;
-                var text = JsonSerializer.Serialize<IImmutableList<T>>(list);
 
-                return text;
+                if (list != null)
+                {
+                    var text = JsonSerializer.Serialize<IImmutableList<T>>(list);
+
+                    return text;
+                }
+                else
+                {
+                    return string.Empty;
+                }
             }
         }
         #endregion
@@ -268,50 +286,50 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public DateTime DeltaTimestamp { get; set; }
 
         /// <summary>Time this item was created.</summary>
-        [Index(6)]
+        [Index(7)]
         public DateTime MirrorTimestamp { get; set; }
         #endregion
 
         #region Add / Remove common properties
         /// <summary>Path to the blob to add / remove.</summary>
-        [Index(7)]
+        [Index(8)]
         public string? BlobPath { get; set; }
 
         /// <summary>Partition values for the data being added / removed.</summary>
         [TypeConverter(typeof(DictionaryConverter))]
-        [Index(8)]
+        [Index(9)]
         public IImmutableDictionary<string, string>? PartitionValues { get; set; }
 
         /// <summary>Size in byte of the blob to add / remove.</summary>
-        [Index(9)]
+        [Index(10)]
         public long? Size { get; set; }
         #endregion
 
         #region Add only
         /// <summary>Number of records in the blob to add.</summary>
-        [Index(10)]
+        [Index(11)]
         public long? RecordCount { get; set; }
 
-        [Index(11)]
+        [Index(12)]
         public string? ExtentId { get; set; }
         #endregion
 
         #region Schema only
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(12)]
+        [Index(13)]
         public Guid? DeltaTableId { get; set; }
 
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(13)]
+        [Index(14)]
         public string? DeltaTableName { get; set; }
 
         /// <summary>List of the partition columns.</summary>
-        [Index(14)]
+        [Index(15)]
         [TypeConverter(typeof(ListConverter<string>))]
         public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
-        [Index(15)]
+        [Index(16)]
         [TypeConverter(typeof(ListConverter<ColumnDefinition>))]
         public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion
@@ -324,11 +342,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             clone.MirrorTimestamp = DateTime.UtcNow;
 
             return clone;
-        }
-
-        public string GetItemKey()
-        {
-            return $"";
         }
 
         public static ReadOnlyMemory<byte> GetCsvHeader()

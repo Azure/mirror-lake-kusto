@@ -12,7 +12,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TableStatus
     {
-        private const string STATUS_TABLE_NAME = "KM_DeltaStatus";
         private readonly GlobalTableStatus _globalTableStatus;
         private IImmutableList<TransactionItem> _statuses;
 

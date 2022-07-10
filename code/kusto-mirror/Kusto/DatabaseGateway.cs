@@ -9,6 +9,9 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
 {
     public class DatabaseGateway
     {
+        private const string STATUS_VIEW_NAME = "KM_DeltaStatus";
+        private const string STATUS_LATEST_VIEW_NAME = "KM_DeltaStatusLatest";
+
         private readonly KustoClusterGateway _clusterGateway;
 
         public DatabaseGateway(KustoClusterGateway clusterGateway, string database)
@@ -47,18 +50,36 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             Uri checkpointBlobUrl,
             CancellationToken ct)
         {
-            var createStatusFunction = $@".create-or-alter function with
+            var createStatusViewFunction = $@".create-or-alter function with
 (docstring = 'View on checkpoint blob', folder='Kusto Mirror')
-KM_DeltaStatus{{
+{STATUS_VIEW_NAME}{{
 externaldata({TransactionItem.ExternalTableSchema})
 [
    '{checkpointBlobUrl};impersonate'
 ]
 with(format='csv', ignoreFirstRecord=true)
+| order by KustoDatabaseName asc, KustoTableName asc, StartTxId asc, State asc, Action asc, BlobPath asc, MirrorTimestamp asc
 }}";
+            var columnListText = string.Join(
+                ", ",
+                TransactionItem.ExternalTableSchema
+                .Split(',')
+                .Select(c => c.Split(':').First()));
+            var createStatusLatestViewFunction = $@".create-or-alter function with
+(docstring = 'Latest state view on checkpoint blob', folder='Kusto Mirror')
+{STATUS_LATEST_VIEW_NAME}{{
+{STATUS_VIEW_NAME}
+| summarize arg_max(MirrorTimestamp, *) by KustoDatabaseName, KustoTableName, StartTxId, Action, State, BlobPath
+| order by KustoDatabaseName asc, KustoTableName asc, StartTxId asc, Action asc, BlobPath asc
+| project {columnListText}
+}}";
+            var commandText = $@".execute database script <|
+{createStatusViewFunction}
+
+{createStatusLatestViewFunction}";
 
             await ExecuteCommandAsync(
-                createStatusFunction,
+                commandText,
                 r => 0,
                 ct);
         }
