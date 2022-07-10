@@ -326,6 +326,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             return clone;
         }
 
+        public string GetItemKey()
+        {
+            return $"";
+        }
+
         public static ReadOnlyMemory<byte> GetCsvHeader()
         {
             using (var stream = new MemoryStream())

@@ -10,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Database
+namespace Kusto.Mirror.ConsoleApp.Kusto
 {
     public class KustoClusterGateway
     {
@@ -77,7 +77,7 @@ namespace Kusto.Mirror.ConsoleApp.Database
             CancellationToken ct)
         {
             var result = await _ingestionProvider.IngestFromStorageAsync(
-                blobUrl.ToString(),
+                $"{blobUrl};managed_identity=system",
                 properties);
             var failureStatus = result.GetIngestionStatusCollection().First();
 

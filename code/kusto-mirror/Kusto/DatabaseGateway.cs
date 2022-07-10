@@ -5,7 +5,7 @@ using Kusto.Mirror.ConsoleApp.Storage;
 using System.Collections.Immutable;
 using System.Data;
 
-namespace Kusto.Mirror.ConsoleApp.Database
+namespace Kusto.Mirror.ConsoleApp.Kusto
 {
     public class DatabaseGateway
     {

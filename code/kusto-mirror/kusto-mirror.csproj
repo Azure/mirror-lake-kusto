@@ -29,6 +29,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Folder Include="Kusto\" />
 	  <Folder Include="Storage\DeltaLake\" />
 	</ItemGroup>
 </Project>

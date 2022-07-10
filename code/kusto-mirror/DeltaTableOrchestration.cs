@@ -2,7 +2,7 @@
 using Kusto.Data.Common;
 using Kusto.Data.Ingestion;
 using Kusto.Ingest;
-using Kusto.Mirror.ConsoleApp.Database;
+using Kusto.Mirror.ConsoleApp.Kusto;
 using Kusto.Mirror.ConsoleApp.Storage;
 using Kusto.Mirror.ConsoleApp.Storage.DeltaLake;
 using System.Collections.Immutable;

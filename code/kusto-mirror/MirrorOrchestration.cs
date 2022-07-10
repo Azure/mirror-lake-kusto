@@ -1,6 +1,6 @@
 ﻿using Azure.Core;
 using Azure.Identity;
-using Kusto.Mirror.ConsoleApp.Database;
+using Kusto.Mirror.ConsoleApp.Kusto;
 using Kusto.Mirror.ConsoleApp.Parameters;
 using Kusto.Mirror.ConsoleApp.Storage;
 using Kusto.Mirror.ConsoleApp.Storage.DeltaLake;

@@ -4,7 +4,6 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Sas;
-using Kusto.Mirror.ConsoleApp.Database;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
