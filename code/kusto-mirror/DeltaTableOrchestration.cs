@@ -117,7 +117,7 @@ namespace Kusto.Mirror.ConsoleApp
 
             stagingTable.StagingTableName =
                 CreateStagingTableName(stagingTable.StartTxId);
-            
+
             Trace.WriteLine(
                 $"Reseting transaction batch {template.StartTxId} to {template.EndTxId}");
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
@@ -350,12 +350,20 @@ namespace Kusto.Mirror.ConsoleApp
             var fullBlobath = Path.Combine(
                 $"{_deltaTableGateway.DeltaTableStorageUrl}/",
                 item.BlobPath);
+            var properties = _databaseGateway.GetIngestionProperties(stagingTable.Name);
+
+            properties.Format = DataSourceFormat.parquet;
+            properties.IngestionMapping = new IngestionMapping()
+            {
+                IngestionMappings = ingestionMappings,
+                IngestionMappingKind = IngestionMappingKind.Parquet
+            };
+            properties.IngestIfNotExists = new[] { item.BlobPath };
+            properties.IngestByTags = new[] { item.BlobPath };
 
             await _databaseGateway.QueueIngestionAsync(
                 new Uri(fullBlobath),
-                stagingTable.Name,
-                DataSourceFormat.parquet,
-                ingestionMappings,
+                properties,
                 ct);
         }
 

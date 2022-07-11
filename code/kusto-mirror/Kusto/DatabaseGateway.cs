@@ -84,40 +84,21 @@ with(format='csv', ignoreFirstRecord=true)
                 ct);
         }
 
-        public async Task QueueIngestionAsync(
-            Uri blobUrl,
-            string tableName,
-            DataSourceFormat format,
-            IEnumerable<ColumnMapping> ingestionMappings,
-            CancellationToken ct)
+        public KustoQueuedIngestionProperties GetIngestionProperties(string tableName)
         {
-            var properties = new KustoQueuedIngestionProperties(DatabaseName, tableName)
-            {
-                Format = format,
-                IngestionMapping = new IngestionMapping()
-                {
-                    IngestionMappings = ingestionMappings,
-                    IngestionMappingKind = TranslateMappingKind(format)
-                }
-            };
-
-            await _clusterGateway.IngestFromStorageAsync(blobUrl, properties, ct);
+            return new KustoQueuedIngestionProperties(DatabaseName, tableName);
         }
 
-        private static IngestionMappingKind TranslateMappingKind(DataSourceFormat format)
+        public async Task QueueIngestionAsync(
+            Uri blobUrl,
+            KustoQueuedIngestionProperties ingestionProperties,
+            CancellationToken ct)
         {
-            switch (format)
+            if (ingestionProperties.DatabaseName != DatabaseName)
             {
-                case DataSourceFormat.csv:
-                    return IngestionMappingKind.Csv;
-                case DataSourceFormat.parquet:
-                    return IngestionMappingKind.Parquet;
-                case DataSourceFormat.json:
-                    return IngestionMappingKind.Json;
-
-                default:
-                    throw new NotSupportedException($"Format '{format}' isn't supported");
+                throw new ArgumentException("Database name", nameof(ingestionProperties));
             }
+            await _clusterGateway.IngestFromStorageAsync(blobUrl, ingestionProperties, ct);
         }
     }
 }
