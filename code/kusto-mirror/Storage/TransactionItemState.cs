@@ -8,13 +8,9 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal enum TransactionItemState
     {
-        ToBeAdded,
+        Initial,
+        Done,
         QueuedForIngestion,
-        Staged,
-        Loaded,
-        ToBeDeleted,
-        Deleted,
-        ToBeApplied,
-        Applied
+        Staged
     }
 }

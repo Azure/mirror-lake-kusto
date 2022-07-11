@@ -121,9 +121,9 @@ namespace Kusto.Mirror.ConsoleApp
             await removeBlobPathsTask;
 
             var newAdded = log.Adds
-                .Select(item => item.UpdateState(TransactionItemState.Loaded));
+                .Select(item => item.UpdateState(TransactionItemState.Done));
             var newRemoved = log.Removes
-                .Select(item => item.UpdateState(TransactionItemState.Deleted));
+                .Select(item => item.UpdateState(TransactionItemState.Done));
 
             await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
         }
@@ -252,7 +252,7 @@ namespace Kusto.Mirror.ConsoleApp
             CancellationToken ct)
         {
             var toBeAdded = adds
-                .Where(i => i.State == TransactionItemState.ToBeAdded);
+                .Where(i => i.State == TransactionItemState.Initial);
 
             if (toBeAdded.Any())
             {
@@ -320,7 +320,7 @@ namespace Kusto.Mirror.ConsoleApp
 
         private async Task EnsureTableSchemaAsync(TransactionItem metadata, CancellationToken ct)
         {
-            if (metadata.State == TransactionItemState.ToBeApplied)
+            if (metadata.State == TransactionItemState.Done)
             {
                 var schema = metadata.Schema!.Append(new ColumnDefinition
                 {
@@ -331,7 +331,7 @@ namespace Kusto.Mirror.ConsoleApp
                     .Select(c => $"['{c.ColumnName}']:{c.ColumnType}");
                 var schemaText = string.Join(", ", columnsText);
                 var createTableText = $".create-merge table {_tableStatus.TableName} ({schemaText})";
-                var newMetadata = metadata.UpdateState(TransactionItemState.Applied);
+                var newMetadata = metadata.UpdateState(TransactionItemState.Done);
 
                 Trace.WriteLine(
                     "Updating schema of Kusto table "

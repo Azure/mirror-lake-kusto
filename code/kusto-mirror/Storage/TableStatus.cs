@@ -81,9 +81,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         private static bool IsComplete(TransactionItemState state)
         {
-            return state != TransactionItemState.Loaded
-                || state != TransactionItemState.Deleted
-                || state != TransactionItemState.Applied;
+            return state != TransactionItemState.Done;
         }
     }
 }
