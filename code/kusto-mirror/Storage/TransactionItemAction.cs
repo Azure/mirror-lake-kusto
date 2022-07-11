@@ -9,6 +9,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     internal enum TransactionItemAction
     {
         Schema,
+        StagingTable,
         Add,
         Remove
     }

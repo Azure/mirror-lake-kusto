@@ -7,16 +7,19 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     {
         public TransactionLog(
             TransactionItem? transactionMetadata,
+            TransactionItem? transactionStagingTable,
             IEnumerable<TransactionItem> transactionAdds,
             IEnumerable<TransactionItem> transactionRemoves)
         {
             if (transactionMetadata == null
+                && transactionStagingTable == null
                 && !transactionAdds.Any()
                 && !transactionRemoves.Any())
             {
                 throw new ArgumentNullException(null, "There are no items");
             }
             Metadata = transactionMetadata;
+            StagingTable = transactionStagingTable;
             Adds = transactionAdds.ToImmutableArray();
             Removes = transactionRemoves.ToImmutableArray();
         }
@@ -24,6 +27,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public TransactionLog(IEnumerable<TransactionItem> items)
             : this(
                   items.Where(i => i.Action == TransactionItemAction.Schema).FirstOrDefault(),
+                  items.Where(i => i.Action == TransactionItemAction.StagingTable).FirstOrDefault(),
                   items.Where(i => i.Action == TransactionItemAction.Add),
                   items.Where(i => i.Action == TransactionItemAction.Remove))
         {
@@ -34,6 +38,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public string KustoTableName => AllItems.First().KustoTableName;
 
         public TransactionItem? Metadata { get; }
+
+        public TransactionItem? StagingTable { get; }
 
         public IImmutableList<TransactionItem> Adds { get; }
 
@@ -57,6 +63,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             {
                 throw new NotImplementedException();
             }
+            if (StagingTable != null || second.StagingTable != null)
+            {
+                throw new NotImplementedException();
+            }
 
             var addIndex = Adds
                 .Select(r => r.BlobPath)
@@ -71,6 +81,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
             return new TransactionLog(
                 Metadata,
+                null,
                 remainingAdds,
                 remainingRemoves);
         }

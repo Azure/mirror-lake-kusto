@@ -153,6 +153,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
             return new TransactionLog(
                 transactionMetadata,
+                null,
                 transactionAdds,
                 transactionRemoves);
         }

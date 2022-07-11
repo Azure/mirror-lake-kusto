@@ -1,5 +1,6 @@
 ﻿using Kusto.Cloud.Platform.Utils;
 using Kusto.Data.Common;
+using Kusto.Data.Exceptions;
 using Kusto.Data.Ingestion;
 using Kusto.Ingest;
 using Kusto.Mirror.ConsoleApp.Kusto;
@@ -39,7 +40,7 @@ namespace Kusto.Mirror.ConsoleApp
             {
                 if (_tableStatus.IsBatchIncomplete)
                 {
-                    await ProcessBatchAsync(ct);
+                    await ProcessTransactionBatchAsync(ct);
                 }
                 else
                 {
@@ -52,7 +53,7 @@ namespace Kusto.Mirror.ConsoleApp
 
                     if (newLogs.Any())
                     {
-                        await PersistNewBatchAsync(newLogs, ct);
+                        await PersistNewLogsAsync(newLogs, ct);
                     }
                     else
                     {
@@ -62,12 +63,14 @@ namespace Kusto.Mirror.ConsoleApp
             }
         }
 
-        private async Task ProcessBatchAsync(CancellationToken ct)
+        private async Task ProcessTransactionBatchAsync(CancellationToken ct)
         {
             var log = _tableStatus.GetEarliestIncompleteBatch();
             var startTxId = log.AllItems.First().StartTxId;
-            var stagingTableName = $"KM_Staging_{_tableStatus.TableName}_{startTxId}";
 
+            Trace.WriteLine(
+                $"Processing Transaction Batch {log.AllItems.First().StartTxId} "
+                + $"to {log.AllItems.First().EndTxId}");
             if (startTxId == 0)
             {
                 if (log.Metadata == null)
@@ -78,15 +81,46 @@ namespace Kusto.Mirror.ConsoleApp
                 log = _tableStatus.GetEarliestIncompleteBatch();
             }
             var targetTable = await GetTableSchemaAsync(log.Metadata, ct);
-            var stagingTable = GetStagingTableSchema(stagingTableName, targetTable);
+            var stagingTableSchema = GetStagingTableSchema(
+                log.StagingTable!.StagingTableName!,
+                targetTable);
+            var isStaging = await EnsureStagingTableAsync(
+                stagingTableSchema,
+                log.StagingTable!,
+                ct);
 
-            await EnsureStagingTableAsync(stagingTable, ct);
-            await EnsureAllQueuedAsync(stagingTable, log.Adds, ct);
-            log = _tableStatus.GetEarliestIncompleteBatch();
-            await EnsureAllStagedAsync(stagingTable, log.Adds, ct);
-            log = _tableStatus.GetEarliestIncompleteBatch();
-            await EnsureAllLoadedAsync(stagingTable, log, ct);
-            await DropStagingTableAsync(stagingTable, ct);
+            if (isStaging)
+            {
+                await EnsureAllQueuedAsync(stagingTableSchema, log.Adds, ct);
+                log = _tableStatus.GetEarliestIncompleteBatch();
+                await EnsureAllStagedAsync(stagingTableSchema, log.Adds, ct);
+                log = _tableStatus.GetEarliestIncompleteBatch();
+                await EnsureAllLoadedAsync(stagingTableSchema, log, ct);
+                await DropStagingTableAsync(stagingTableSchema, ct);
+            }
+            else
+            {
+                await ResetTransactionBatchAsync(log, ct);
+            }
+        }
+
+        private async Task ResetTransactionBatchAsync(
+            TransactionLog log,
+            CancellationToken ct)
+        {
+            var stagingTable =
+                log.StagingTable!.UpdateState(TransactionItemState.Initial);
+            var resetAdds = log.Adds
+                .Where(a => a.State != TransactionItemState.Initial)
+                .Select(a => a.UpdateState(TransactionItemState.Initial));
+            var template = log.AllItems.First();
+
+            stagingTable.StagingTableName =
+                CreateStagingTableName(stagingTable.StartTxId);
+            
+            Trace.WriteLine(
+                $"Reseting transaction batch {template.StartTxId} to {template.EndTxId}");
+            await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
         }
 
         private Task EnsureAllStagedAsync(
@@ -197,16 +231,47 @@ namespace Kusto.Mirror.ConsoleApp
             return new TableDefinition(stagingTableName, moreColumns);
         }
 
-        private async Task EnsureStagingTableAsync(
-            TableDefinition stagingTable,
+        private async Task<bool> EnsureStagingTableAsync(
+            TableDefinition stagingTableSchema,
+            TransactionItem stagingTableItem,
+            CancellationToken ct)
+        {
+            if (stagingTableItem.State == TransactionItemState.Initial)
+            {
+                await CreateStagingTableAsync(stagingTableSchema, ct);
+                await _tableStatus.PersistNewItemsAsync(
+                    new[] { stagingTableItem.UpdateState(TransactionItemState.Staged) },
+                    ct);
+
+                return true;
+            }
+            else
+            {
+                try
+                {
+                    await _databaseGateway.ExecuteCommandAsync(
+                        $".show table {stagingTableSchema.Name}",
+                        r => 0, ct);
+
+                    return true;
+                }
+                catch (EntityNotFoundException)
+                {
+                    return false;
+                }
+            }
+        }
+
+        private async Task CreateStagingTableAsync(
+            TableDefinition stagingTableSchema,
             CancellationToken ct)
         {
             var schemaText = string.Join(
                 ", ",
-                stagingTable.Columns.Select(c => $"['{c.ColumnName}']:{c.ColumnType}"));
-            var createTableText = $".create-merge table {stagingTable.Name} ({schemaText})";
+                stagingTableSchema.Columns.Select(c => $"['{c.ColumnName}']:{c.ColumnType}"));
+            var createTableText = $".create-merge table {stagingTableSchema.Name} ({schemaText})";
             //  Disable merge policy not to run after phantom extents
-            var mergePolicyText = @$".alter table {stagingTable.Name} policy merge
+            var mergePolicyText = @$".alter table {stagingTableSchema.Name} policy merge
 ```
 {{
   ""AllowRebuild"": false,
@@ -214,9 +279,9 @@ namespace Kusto.Mirror.ConsoleApp
 }}
 ```";
             //  Don't cache anything not to potentially overload the cache with big historical data
-            var cachePolicyText = $".alter table {stagingTable.Name} policy caching hot = 0d";
+            var cachePolicyText = $".alter table {stagingTableSchema.Name} policy caching hot = 0d";
             //  Don't delete anything in the table
-            var retentionPolicyText = @$".alter table {stagingTable.Name} policy retention 
+            var retentionPolicyText = @$".alter table {stagingTableSchema.Name} policy retention 
 ```
 {{
   ""SoftDeletePeriod"": ""10000000:0:0:0""
@@ -224,8 +289,8 @@ namespace Kusto.Mirror.ConsoleApp
 ```";
             //  Staging table:  shouldn't be queried by normal users
             var restrictedViewPolicyText =
-                $".alter table {stagingTable.Name} policy restricted_view_access true";
-            var ingestionBatchingPolicyText = @$".alter table {stagingTable.Name} policy ingestionbatching
+                $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
+            var ingestionBatchingPolicyText = @$".alter table {stagingTableSchema.Name} policy ingestionbatching
 ```
 {{
   ""MaximumBatchingTimeSpan"":""0:0:10""
@@ -342,13 +407,31 @@ namespace Kusto.Mirror.ConsoleApp
             }
         }
 
-        private async Task PersistNewBatchAsync(
-            IImmutableList<TransactionLog> newLogs,
+        private async Task PersistNewLogsAsync(
+            IEnumerable<TransactionLog> newLogs,
             CancellationToken ct)
         {
             var mergedLogs = TransactionLog.Coalesce(newLogs);
+            var templateItem = mergedLogs.AllItems.First();
+            var startTxId = templateItem.StartTxId;
+            var stagingTableName = CreateStagingTableName(startTxId);
+            var stagingTableItem = TransactionItem.CreateStagingTableItem(
+                templateItem.KustoDatabaseName,
+                templateItem.KustoTableName,
+                templateItem.StartTxId,
+                templateItem.EndTxId,
+                TransactionItemState.Initial,
+                stagingTableName);
+            var allItems = mergedLogs.AllItems.Append(stagingTableItem);
 
-            await _tableStatus.PersistNewItemsAsync(mergedLogs.AllItems, ct);
+            await _tableStatus.PersistNewItemsAsync(allItems, ct);
+        }
+
+        private string CreateStagingTableName(int startTxId)
+        {
+            var uniqueId = DateTime.UtcNow.Ticks.ToString("x8");
+
+            return $"KM_Staging_{_tableStatus.TableName}_{startTxId}_{uniqueId}";
         }
     }
 }

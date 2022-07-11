@@ -14,8 +14,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
     {
         public static string ExternalTableSchema =>
             "KustoDatabaseName:string,KustoTableName:string,StartTxId:int,EndTxId:int,"
-            + "Action:string,State:string,DeltaTimestamp:datetime,MirrorTimestamp:datetime,"
-            + "BlobPath:string,"
+            + "Action:string,State:string,MirrorTimestamp:datetime,DeltaTimestamp:datetime,"
+            + "StagingTableName:string,BlobPath:string,"
             + "PartitionValues:dynamic,Size:long,RecordCount:long,ExtentId:string,"
             + "DeltaTableId:string,"
             + "DeltaTableName:string,PartitionColumns:dynamic,Schema:dynamic";
@@ -122,7 +122,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             EndTxId = -1;
             Action = (TransactionItemAction)1000000;
             State = (TransactionItemState)1000000;
-            DeltaTimestamp = DateTime.MinValue;
             MirrorTimestamp = DateTime.MinValue;
         }
 
@@ -133,7 +132,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             int endTxId,
             TransactionItemAction action,
             TransactionItemState state,
-            DateTime timestamp,
+            DateTime? deltaTimestamp,
+            string? stagingTableName,
             string? blobPath,
             IImmutableDictionary<string, string>? partitionValues,
             long? size,
@@ -149,7 +149,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             EndTxId = endTxId;
             Action = action;
             State = state;
-            DeltaTimestamp = timestamp;
+            DeltaTimestamp = deltaTimestamp;
+            StagingTableName = stagingTableName;
             MirrorTimestamp = DateTime.UtcNow;
             BlobPath = blobPath;
             PartitionValues = partitionValues;
@@ -161,13 +162,40 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             Schema = schema;
         }
 
+        public static TransactionItem CreateStagingTableItem(
+            string kustoDatabaseName,
+            string kustoTableName,
+            int startTxId,
+            int endTxId,
+            TransactionItemState state,
+            string stagingTableName)
+        {
+            return new TransactionItem(
+                kustoDatabaseName,
+                kustoTableName,
+                startTxId,
+                endTxId,
+                TransactionItemAction.StagingTable,
+                state,
+                null,
+                stagingTableName,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        }
+
         public static TransactionItem CreateAddItem(
             string kustoDatabaseName,
             string kustoTableName,
             int startTxId,
             int endTxId,
             TransactionItemState state,
-            DateTime timestamp,
+            DateTime deltaTimestamp,
             string blobPath,
             IImmutableDictionary<string, string> partitionValues,
             long size,
@@ -180,7 +208,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 endTxId,
                 TransactionItemAction.Add,
                 state,
-                timestamp,
+                deltaTimestamp,
+                null,
                 blobPath,
                 partitionValues,
                 size,
@@ -197,7 +226,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             int startTxId,
             int endTxId,
             TransactionItemState state,
-            DateTime timestamp,
+            DateTime deltaTimestamp,
             string blobPath,
             //  Synapse Spark sometimes omit those on remove
             IImmutableDictionary<string, string>? partitionValues,
@@ -210,7 +239,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 endTxId,
                 TransactionItemAction.Remove,
                 state,
-                timestamp,
+                deltaTimestamp,
+                null,
                 blobPath,
                 partitionValues,
                 size,
@@ -227,7 +257,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             int startTxId,
             int endTxId,
             TransactionItemState state,
-            DateTime timestamp,
+            DateTime deltaTimestamp,
             Guid deltaTableId,
             string deltaTableName,
             IImmutableList<string> partitionColumns,
@@ -240,7 +270,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 endTxId,
                 TransactionItemAction.Schema,
                 state,
-                timestamp,
+                deltaTimestamp,
+                null,
                 null,
                 null,
                 null,
@@ -277,59 +308,69 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         [Index(5)]
         public TransactionItemState State { get; set; }
 
+        /// <summary>Time this item was created.</summary>
+        [Index(6)]
+        public DateTime MirrorTimestamp { get; set; }
+        #endregion
+
+        #region DeltaTimestamp
+        /// <summary>Name of the staging table for the batch.</summary>
         /// <summary>
         /// For schema:  creation time of the table.
+        /// For staging table:  doesn't exist.
         /// For add:  modification time.
         /// For remove:  deletion time.
         /// </summary>
-        [Index(6)]
-        public DateTime DeltaTimestamp { get; set; }
-
-        /// <summary>Time this item was created.</summary>
         [Index(7)]
-        public DateTime MirrorTimestamp { get; set; }
+        public DateTime? DeltaTimestamp { get; set; }
+        #endregion
+
+        #region StagingTable
+        /// <summary>Name of the staging table for the batch.</summary>
+        [Index(8)]
+        public string? StagingTableName { get; set; }
         #endregion
 
         #region Add / Remove common properties
         /// <summary>Path to the blob to add / remove.</summary>
-        [Index(8)]
+        [Index(9)]
         public string? BlobPath { get; set; }
 
         /// <summary>Partition values for the data being added / removed.</summary>
         [TypeConverter(typeof(DictionaryConverter))]
-        [Index(9)]
+        [Index(10)]
         public IImmutableDictionary<string, string>? PartitionValues { get; set; }
 
         /// <summary>Size in byte of the blob to add / remove.</summary>
-        [Index(10)]
+        [Index(11)]
         public long? Size { get; set; }
         #endregion
 
         #region Add only
         /// <summary>Number of records in the blob to add.</summary>
-        [Index(11)]
+        [Index(12)]
         public long? RecordCount { get; set; }
 
-        [Index(12)]
+        [Index(13)]
         public string? ExtentId { get; set; }
         #endregion
 
         #region Schema only
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(13)]
+        [Index(14)]
         public Guid? DeltaTableId { get; set; }
 
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(14)]
+        [Index(15)]
         public string? DeltaTableName { get; set; }
 
         /// <summary>List of the partition columns.</summary>
-        [Index(15)]
+        [Index(16)]
         [TypeConverter(typeof(ListConverter<string>))]
         public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
-        [Index(16)]
+        [Index(17)]
         [TypeConverter(typeof(ListConverter<ColumnDefinition>))]
         public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion
