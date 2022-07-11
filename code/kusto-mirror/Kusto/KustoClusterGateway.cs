@@ -76,9 +76,12 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             KustoQueuedIngestionProperties properties,
             CancellationToken ct)
         {
+            var ingestionBlobUrl = $"{blobUrl};managed_identity=system";
             var result = await _ingestionProvider.IngestFromStorageAsync(
-                $"{blobUrl};managed_identity=system",
-                properties);
+                ingestionBlobUrl,
+                properties,
+                //  Recommended so the DM sizes the file properly
+                new StorageSourceOptions { Size = 0 });
             var failureStatus = result.GetIngestionStatusCollection().First();
 
             if (failureStatus.Status != Status.Queued)
