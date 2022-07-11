@@ -118,7 +118,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
         #region Load log
         public static TransactionLog LoadDeltaLog(
-            int txId,
+            long txId,
             string kustoDatabaseName,
             string kustoTableName,
             string blobText)
@@ -160,7 +160,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
         private static TransactionItem LoadMetadata(
             MetadataData metadata,
-            int txId,
+            long txId,
             string kustoDatabaseName,
             string kustoTableName)
         {
@@ -199,7 +199,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
         private static TransactionItem LoadAdd(
             AddData addEntry,
-            int txId,
+            long txId,
             string kustoDatabaseName,
             string kustoTableName)
         {
@@ -232,7 +232,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 
         private static TransactionItem LoadRemove(
             RemoveData removeEntry,
-            int txId,
+            long txId,
             string kustoDatabaseName,
             string kustoTableName)
         {

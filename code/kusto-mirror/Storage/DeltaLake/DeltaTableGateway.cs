@@ -96,7 +96,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
         }
 
         private async Task<TransactionLog> LoadTransactionBlobAsync(
-            int txId,
+            long txId,
             string blobName,
             string kustoDatabaseName,
             string kustoTableName)
@@ -119,16 +119,16 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             }
         }
 
-        private int? ExtractTransactionId(string blobName)
+        private long? ExtractTransactionId(string blobName)
         {
             if (blobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
                 var lastSlash = blobName.LastIndexOf('/');
                 var lastDot = blobName.LastIndexOf('.');
                 var txIdText = blobName.Substring(lastSlash + 1, lastDot - lastSlash - 1);
-                int txId;
+                long txId;
 
-                if (int.TryParse(txIdText, out txId))
+                if (long.TryParse(txIdText, out txId))
                 {
                     return txId;
                 }

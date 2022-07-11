@@ -61,8 +61,33 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 .Where(s => IsComplete(s.State))
                 .Select(s => s.StartTxId)
                 .First();
+
+            return GetBatch(startTxId);
+        }
+
+        public TransactionLog GetBatch(long startTxId)
+        {
             var batchItems = _statuses
                 .Where(s => s.StartTxId == startTxId);
+
+            return new TransactionLog(batchItems);
+        }
+
+        public TransactionLog Refresh(TransactionLog log)
+        {
+            var startTxId = log.StartTxId;
+            var endTxId = log.EndTxId;
+            var batchItems = _statuses
+                .Where(s => s.StartTxId == startTxId);
+            var logs = new TransactionLog(batchItems);
+
+            foreach (var item in logs.AllItems)
+            {
+                if (item.EndTxId != endTxId)
+                {
+                    throw new InvalidOperationException("Invalid End transaction ID");
+                }
+            }
 
             return new TransactionLog(batchItems);
         }

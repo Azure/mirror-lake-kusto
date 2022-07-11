@@ -128,8 +128,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private TransactionItem(
             string kustoDatabaseName,
             string kustoTableName,
-            int startTxId,
-            int endTxId,
+            long startTxId,
+            long endTxId,
             TransactionItemAction action,
             TransactionItemState state,
             DateTime? deltaTimestamp,
@@ -165,8 +165,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public static TransactionItem CreateStagingTableItem(
             string kustoDatabaseName,
             string kustoTableName,
-            int startTxId,
-            int endTxId,
+            long startTxId,
+            long endTxId,
             TransactionItemState state,
             string stagingTableName)
         {
@@ -192,8 +192,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public static TransactionItem CreateAddItem(
             string kustoDatabaseName,
             string kustoTableName,
-            int startTxId,
-            int endTxId,
+            long startTxId,
+            long endTxId,
             TransactionItemState state,
             DateTime deltaTimestamp,
             string blobPath,
@@ -223,8 +223,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public static TransactionItem CreateRemoveItem(
             string kustoDatabaseName,
             string kustoTableName,
-            int startTxId,
-            int endTxId,
+            long startTxId,
+            long endTxId,
             TransactionItemState state,
             DateTime deltaTimestamp,
             string blobPath,
@@ -254,8 +254,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public static TransactionItem CreateSchemaItem(
             string kustoDatabaseName,
             string kustoTableName,
-            int startTxId,
-            int endTxId,
+            long startTxId,
+            long endTxId,
             TransactionItemState state,
             DateTime deltaTimestamp,
             Guid deltaTableId,
@@ -294,11 +294,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         /// <summary>Start of the transaction range.</summary>
         [Index(2)]
-        public int StartTxId { get; set; }
+        public long StartTxId { get; set; }
 
         /// <summary>End of the transaction range.</summary>
         [Index(3)]
-        public int EndTxId { get; set; }
+        public long EndTxId { get; set; }
 
         /// <summary>Action to be done.</summary>
         [Index(4)]

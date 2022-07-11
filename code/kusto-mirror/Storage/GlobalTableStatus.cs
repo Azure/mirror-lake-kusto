@@ -17,8 +17,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private record TableKey(string Database, string Table);
 
         private record TransactionItemKey(
-            int StartTxId,
-            int EndTxId,
+            long StartTxId,
+            long EndTxId,
             TransactionItemAction Action,
             string? BlobPath);
 

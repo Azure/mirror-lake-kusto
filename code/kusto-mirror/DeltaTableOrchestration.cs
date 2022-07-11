@@ -40,7 +40,9 @@ namespace Kusto.Mirror.ConsoleApp
             {
                 if (_tableStatus.IsBatchIncomplete)
                 {
-                    await ProcessTransactionBatchAsync(ct);
+                    await ProcessTransactionBatchAsync(
+                        _tableStatus.GetEarliestIncompleteBatch(),
+                        ct);
                 }
                 else
                 {
@@ -63,44 +65,42 @@ namespace Kusto.Mirror.ConsoleApp
             }
         }
 
-        private async Task ProcessTransactionBatchAsync(CancellationToken ct)
+        private async Task ProcessTransactionBatchAsync(
+            TransactionLog logs,
+            CancellationToken ct)
         {
-            var log = _tableStatus.GetEarliestIncompleteBatch();
-            var startTxId = log.AllItems.First().StartTxId;
-
             Trace.WriteLine(
-                $"Processing Transaction Batch {log.AllItems.First().StartTxId} "
-                + $"to {log.AllItems.First().EndTxId}");
-            if (startTxId == 0)
+                $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
+                + $"to {logs.AllItems.First().EndTxId}");
+
+            if (logs.StartTxId == 0)
             {
-                if (log.Metadata == null)
+                if (logs.Metadata == null)
                 {
                     throw new InvalidOperationException("Transaction 0 should have meta data");
                 }
-                await EnsureTableSchemaAsync(log.Metadata, ct);
-                log = _tableStatus.GetEarliestIncompleteBatch();
+                await EnsureTableSchemaAsync(logs.Metadata, ct);
+                logs = _tableStatus.Refresh(logs);
             }
-            var targetTable = await GetTableSchemaAsync(log.Metadata, ct);
+            var targetTable = await GetTableSchemaAsync(logs.Metadata, ct);
             var stagingTableSchema = GetStagingTableSchema(
-                log.StagingTable!.StagingTableName!,
+                logs.StagingTable!.StagingTableName!,
                 targetTable);
             var isStaging = await EnsureStagingTableAsync(
                 stagingTableSchema,
-                log.StagingTable!,
+                logs.StagingTable!,
                 ct);
 
             if (isStaging)
             {
-                await EnsureAllQueuedAsync(stagingTableSchema, log.Adds, ct);
-                log = _tableStatus.GetEarliestIncompleteBatch();
-                await EnsureAllStagedAsync(stagingTableSchema, log.Adds, ct);
-                log = _tableStatus.GetEarliestIncompleteBatch();
-                await EnsureAllLoadedAsync(stagingTableSchema, log, ct);
+                await EnsureAllQueuedAsync(stagingTableSchema, logs.StartTxId, ct);
+                await EnsureAllStagedAsync(stagingTableSchema, logs.StartTxId, ct);
+                await EnsureAllLoadedAsync(stagingTableSchema, logs.StartTxId, ct);
                 await DropStagingTableAsync(stagingTableSchema, ct);
             }
             else
             {
-                await ResetTransactionBatchAsync(log, ct);
+                await ResetTransactionBatchAsync(logs, ct);
             }
         }
 
@@ -125,7 +125,7 @@ namespace Kusto.Mirror.ConsoleApp
 
         private Task EnsureAllStagedAsync(
             TableDefinition stagingTable,
-            IEnumerable<TransactionItem> adds,
+            long startTxId,
             CancellationToken ct)
         {
             throw new NotImplementedException();
@@ -133,30 +133,31 @@ namespace Kusto.Mirror.ConsoleApp
 
         private async Task EnsureAllLoadedAsync(
             TableDefinition stagingTable,
-            TransactionLog log,
+            long startTxId,
             CancellationToken ct)
         {
-            var extentIds = log.Adds
+            var logs = _tableStatus.GetBatch(startTxId);
+            var extentIds = logs.Adds
                 .Select(i => i.ExtentId!)
                 .Distinct()
                 .ToImmutableArray();
-            var blobPathToRemove = log.Removes
+            var blobPathToRemove = logs.Removes
                 .Select(i => i.BlobPath!)
                 .Distinct()
                 .ToImmutableArray();
             var removeBlobPathsTask = RemoveBlobPathsAsync(blobPathToRemove, ct);
 
-            if (log.Metadata != null)
+            if (logs.Metadata != null)
             {
-                await EnsureTableSchemaAsync(log.Metadata, ct);
+                await EnsureTableSchemaAsync(logs.Metadata, ct);
             }
 
             await LoadExtentsAsync(stagingTable, extentIds, ct);
             await removeBlobPathsTask;
 
-            var newAdded = log.Adds
+            var newAdded = logs.Adds
                 .Select(item => item.UpdateState(TransactionItemState.Done));
-            var newRemoved = log.Removes
+            var newRemoved = logs.Removes
                 .Select(item => item.UpdateState(TransactionItemState.Done));
 
             await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
@@ -290,17 +291,9 @@ namespace Kusto.Mirror.ConsoleApp
             //  Staging table:  shouldn't be queried by normal users
             var restrictedViewPolicyText =
                 $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
-            var ingestionBatchingPolicyText = @$".alter table {stagingTableSchema.Name} policy ingestionbatching
-```
-{{
-  ""MaximumBatchingTimeSpan"":""0:0:10""
-}}
-```";
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
-
-{ingestionBatchingPolicyText}
 
 {retentionPolicyText}
 
@@ -313,10 +306,12 @@ namespace Kusto.Mirror.ConsoleApp
 
         private async Task EnsureAllQueuedAsync(
             TableDefinition stagingTable,
-            IEnumerable<TransactionItem> adds,
+            long startTxId,
             CancellationToken ct)
         {
-            var toBeAdded = adds
+            var logs = _tableStatus.GetBatch(startTxId);
+            var toBeAdded = logs
+                .Adds
                 .Where(i => i.State == TransactionItemState.Initial);
 
             if (toBeAdded.Any())
@@ -435,7 +430,7 @@ namespace Kusto.Mirror.ConsoleApp
             await _tableStatus.PersistNewItemsAsync(allItems, ct);
         }
 
-        private string CreateStagingTableName(int startTxId)
+        private string CreateStagingTableName(long startTxId)
         {
             var uniqueId = DateTime.UtcNow.Ticks.ToString("x8");
 

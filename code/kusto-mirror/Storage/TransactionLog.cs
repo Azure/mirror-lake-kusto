@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using Kusto.Ingest.Exceptions;
+using System.Collections.Immutable;
 using System.Text.Json;
 
 namespace Kusto.Mirror.ConsoleApp.Storage
@@ -36,6 +37,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public string KustoDatabaseName => AllItems.First().KustoDatabaseName;
 
         public string KustoTableName => AllItems.First().KustoTableName;
+
+        public long StartTxId => AllItems.First().StartTxId;
+        
+        public long EndTxId => AllItems.First().EndTxId;
 
         public TransactionItem? Metadata { get; }
 
