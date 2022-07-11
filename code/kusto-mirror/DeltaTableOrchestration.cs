@@ -13,6 +13,32 @@ namespace Kusto.Mirror.ConsoleApp
 {
     internal class DeltaTableOrchestration
     {
+        #region Inner types
+        private class IngestTags
+        {
+            public IngestTags(string tags)
+            {
+                const string INGEST_BY_PREFIX = "ingest-by:";
+
+                var individualTags = tags.Split(' ');
+
+                BlobPath = individualTags
+                    .Where(t => t.StartsWith(INGEST_BY_PREFIX))
+                    .Select(t => t.Substring(INGEST_BY_PREFIX.Length))
+                    .FirstOrDefault();
+                IsStaged = individualTags
+                    .Where(t => t == STAGED_TAG)
+                    .Any();
+            }
+
+            public string? BlobPath { get; }
+
+            public bool IsStaged { get; }
+        }
+        #endregion
+
+        private const int EXTENT_CHECK_BATCH_SIZE = 5;
+        const string STAGED_TAG = "staged";
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
 
@@ -123,12 +149,59 @@ namespace Kusto.Mirror.ConsoleApp
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
         }
 
-        private Task EnsureAllStagedAsync(
+        private async Task EnsureAllStagedAsync(
             TableDefinition stagingTable,
             long startTxId,
             CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var logs = _tableStatus.GetBatch(startTxId);
+            var itemMap = logs
+                .Adds
+                .ToImmutableDictionary(a => a.BlobPath!);
+
+            if (itemMap.Any())
+            {   //  Limit output, not to have a too heavy result set
+                var showTableText = $@".show table {stagingTable.Name} extents
+where tags !has '{STAGED_TAG}'
+| project ExtentId, Tags
+| take {EXTENT_CHECK_BATCH_SIZE}";
+                var extents = await _databaseGateway.ExecuteCommandAsync(
+                    showTableText,
+                    d => new
+                    {
+                        ExtentId = (Guid)d["ExtentId"],
+                        Tags = new IngestTags((string)d["Tags"])
+                    },
+                    ct);
+                var extentsToStage = extents
+                    .Where(e => e.Tags.BlobPath != null)
+                    .Where(e => itemMap.ContainsKey(e.Tags.BlobPath!))
+                    .ToImmutableArray();
+                var itemToUpdate = extentsToStage
+                    .Select(e => new { Item = itemMap[e.Tags.BlobPath!], e.ExtentId })
+                    .Where(i => i.Item.State == TransactionItemState.QueuedForIngestion)
+                    .Select(i => new
+                    {
+                        Item = i.Item.UpdateState(TransactionItemState.Staged),
+                        i.ExtentId
+                    })
+                    .ToImmutableArray();
+
+                foreach (var i in itemToUpdate)
+                {
+                    i.Item.ExtentId = i.ExtentId.ToString();
+                }
+                //  We first persist the transaction items:  possible to have unmarked extents
+                await _tableStatus.PersistNewItemsAsync(itemToUpdate.Select(i => i.Item), ct);
+
+                var extentIdsText =
+                    string.Join(", ", extentsToStage.Select(e => $"'{e.ExtentId}'"));
+                var tagExtentsCommandText = $@".alter extent tags ('{STAGED_TAG}') <|
+print ExtentId=dynamic([{extentIdsText}])
+| mv-expand ExtentId to typeof(string)";
+
+                await _databaseGateway.ExecuteCommandAsync(tagExtentsCommandText, r=>0, ct);
+            }
         }
 
         private async Task EnsureAllLoadedAsync(
