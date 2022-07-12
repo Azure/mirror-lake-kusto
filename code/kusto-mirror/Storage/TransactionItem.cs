@@ -374,10 +374,23 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public TransactionItem UpdateState(TransactionItemState applied)
         {
-            var clone = Clone();
+            var clone = Clone(clone =>
+            {
+                clone.State = applied;
+                clone.MirrorTimestamp = DateTime.UtcNow;
+            });
 
-            clone.State = applied;
-            clone.MirrorTimestamp = DateTime.UtcNow;
+            return clone;
+        }
+
+        public TransactionItem Clone(Action<TransactionItem>? action = null)
+        {
+            var clone = (TransactionItem)MemberwiseClone();
+
+            if (action != null)
+            {
+                action(clone);
+            }
 
             return clone;
         }
@@ -439,11 +452,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
                 return items.ToImmutableArray();
             }
-        }
-
-        private TransactionItem Clone()
-        {
-            return (TransactionItem)MemberwiseClone();
         }
     }
 }

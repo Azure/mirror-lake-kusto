@@ -77,6 +77,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                         TxId = ExtractTransactionId(b.Name)
                     })
                     .Where(c => c.TxId.HasValue)
+                    .Where(c => fromTxId == null || c.TxId >= fromTxId)
                     .OrderBy(c => c.TxId!.Value)
                     .Select(c => LoadTransactionBlobAsync(
                         c.TxId!.Value,

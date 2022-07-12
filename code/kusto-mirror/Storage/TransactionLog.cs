@@ -39,7 +39,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public string KustoTableName => AllItems.First().KustoTableName;
 
         public long StartTxId => AllItems.First().StartTxId;
-        
+
         public long EndTxId => AllItems.First().EndTxId;
 
         public TransactionItem? Metadata { get; }
@@ -56,9 +56,16 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             {
                 var all = Adds.Concat(Removes);
 
-                return (Metadata != null)
-                    ? all.Prepend(Metadata)
-                    : all;
+                if (Metadata != null)
+                {
+                    all = all.Append(Metadata);
+                }
+                if (StagingTable != null)
+                {
+                    all = all.Append(StagingTable);
+                }
+
+                return all;
             }
         }
 
@@ -79,13 +86,20 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             var removeIndex = Removes
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
+            Action<TransactionItem> action = clone =>
+            {
+                clone.StartTxId = Math.Min(StartTxId, second.StartTxId);
+                clone.EndTxId = Math.Max(EndTxId, second.EndTxId);
+            };
             var remainingAdds = Adds
-                .Where(a => !removeIndex.Contains(a.BlobPath));
+                .Where(a => !removeIndex.Contains(a.BlobPath))
+                .Select(a => a.Clone(c => action(c)));
             var remainingRemoves = Removes
-                .Where(a => !addIndex.Contains(a.BlobPath));
+                .Where(a => !addIndex.Contains(a.BlobPath))
+                .Select(a => a.Clone(c => action(c)));
 
             return new TransactionLog(
-                Metadata,
+                Metadata != null ? Metadata.Clone(action) : null,
                 null,
                 remainingAdds,
                 remainingRemoves);

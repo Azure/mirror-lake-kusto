@@ -11,7 +11,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         Initial,
         Done,
         QueuedForIngestion,
-        Staged,
-        Loaded
+        Staged
     }
 }

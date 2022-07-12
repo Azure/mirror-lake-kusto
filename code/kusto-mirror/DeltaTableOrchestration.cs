@@ -19,6 +19,7 @@ namespace Kusto.Mirror.ConsoleApp
         private const string STAGED_TAG = "km_staged";
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
+        private static readonly TimeSpan BETWEEN_TX_PROBE_DELAY = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan BETWEEN_EXTENT_PROBE_DELAY = TimeSpan.FromSeconds(5);
 
         private readonly TableStatus _tableStatus;
@@ -64,7 +65,7 @@ namespace Kusto.Mirror.ConsoleApp
                     }
                     else
                     {
-                        throw new NotImplementedException();
+                        await Task.Delay(BETWEEN_TX_PROBE_DELAY, ct);
                     }
                 }
             }
@@ -101,11 +102,29 @@ namespace Kusto.Mirror.ConsoleApp
                 await EnsureAllQueuedAsync(stagingTableSchema, logs.StartTxId, ct);
                 await EnsureAllStagedAsync(stagingTableSchema, logs.StartTxId, ct);
                 await EnsureAllLoadedAsync(stagingTableSchema, logs.StartTxId, ct);
-                await DropStagingTableAsync(stagingTableSchema, ct);
+                await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
+                Trace.TraceInformation(
+                    $"Table '{_tableStatus.TableName}', "
+                    + $"tx {logs.StartTxId} to {logs.EndTxId} processed");
             }
             else
             {
-                await ResetTransactionBatchAsync(logs, ct);
+                var notDone = logs.AllItems.Where(l => l.State != TransactionItemState.Done);
+
+                if (notDone.Count() == 1)
+                {
+                    if (notDone.First().Action != TransactionItemAction.StagingTable)
+                    {
+                        throw new MirrorException("Should only have the staging table remain");
+                    }
+                    await _tableStatus.PersistNewItemsAsync(
+                        new[] { logs.StagingTable!.UpdateState(TransactionItemState.Done) },
+                        ct);
+                }
+                else
+                {
+                    await ResetTransactionBatchAsync(logs, ct);
+                }
             }
         }
 
@@ -220,15 +239,13 @@ print ExtentId=dynamic([{extentIdsText}])
 
             Trace.TraceInformation($"Loading extents in main table");
             await LoadExtentsAsync(stagingTable, ct);
-            await DropTagsAsync(startTxId, ct);
             await removeBlobPathsTask;
+            await DropTagsAsync(startTxId, ct);
 
-            var newAdded = logs.Adds
-                .Select(item => item.UpdateState(TransactionItemState.Loaded));
-            var newRemoved = logs.Removes
+            var newItems = logs.Adds.Concat(logs.Removes)
                 .Select(item => item.UpdateState(TransactionItemState.Done));
 
-            await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
+            await _tableStatus.PersistNewItemsAsync(newItems, ct);
         }
 
         private async Task DropTagsAsync(long startTxId, CancellationToken ct)
@@ -271,12 +288,17 @@ print ExtentId=dynamic([{extentIdsText}])
         }
 
         private async Task DropStagingTableAsync(
-            TableDefinition stagingTable,
+            TransactionItem stagingTable,
+            long startTxId,
             CancellationToken ct)
         {
-            var commandText = $".drop table {stagingTable.Name}";
+            var commandText = $".drop table {stagingTable.StagingTableName} ifexists";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+
+            var newSchemaItem = stagingTable.UpdateState(TransactionItemState.Done);
+
+            await _tableStatus.PersistNewItemsAsync(new[] { newSchemaItem }, ct);
         }
 
         private async Task<TableDefinition> GetTableSchemaAsync(
@@ -349,9 +371,16 @@ print ExtentId=dynamic([{extentIdsText}])
 
                     return true;
                 }
-                catch (EntityNotFoundException)
+                catch (MirrorException ex)
                 {
-                    return false;
+                    if (ex.InnerException is EntityNotFoundException)
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
             }
         }
