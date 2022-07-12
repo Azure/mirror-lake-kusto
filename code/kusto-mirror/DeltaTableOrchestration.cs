@@ -38,9 +38,10 @@ namespace Kusto.Mirror.ConsoleApp
         #endregion
 
         private const int EXTENT_CHECK_BATCH_SIZE = 5;
-        const string STAGED_TAG = "staged";
+        private const string STAGED_TAG = "staged";
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
+        private static readonly TimeSpan BETWEEN_EXTENT_PROBE_DELAY = TimeSpan.FromSeconds(5);
 
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
@@ -155,12 +156,13 @@ namespace Kusto.Mirror.ConsoleApp
             CancellationToken ct)
         {
             var logs = _tableStatus.GetBatch(startTxId);
-            var itemMap = logs
-                .Adds
-                .ToImmutableDictionary(a => a.BlobPath!);
 
-            if (itemMap.Any())
-            {   //  Limit output, not to have a too heavy result set
+            if (logs.Adds.Where(a => a.State == TransactionItemState.QueuedForIngestion).Any())
+            {
+                var itemMap = logs
+                    .Adds
+                    .ToImmutableDictionary(a => a.BlobPath!);
+                //  Limit output, not to have a too heavy result set
                 var showTableText = $@".show table {stagingTable.Name} extents
 where tags !has '{STAGED_TAG}'
 | project ExtentId, Tags
@@ -177,30 +179,45 @@ where tags !has '{STAGED_TAG}'
                     .Where(e => e.Tags.BlobPath != null)
                     .Where(e => itemMap.ContainsKey(e.Tags.BlobPath!))
                     .ToImmutableArray();
-                var itemToUpdate = extentsToStage
-                    .Select(e => new { Item = itemMap[e.Tags.BlobPath!], e.ExtentId })
-                    .Where(i => i.Item.State == TransactionItemState.QueuedForIngestion)
-                    .Select(i => new
-                    {
-                        Item = i.Item.UpdateState(TransactionItemState.Staged),
-                        i.ExtentId
-                    })
-                    .ToImmutableArray();
 
-                foreach (var i in itemToUpdate)
+                if (extentsToStage.Any())
                 {
-                    i.Item.ExtentId = i.ExtentId.ToString();
-                }
-                //  We first persist the transaction items:  possible to have unmarked extents
-                await _tableStatus.PersistNewItemsAsync(itemToUpdate.Select(i => i.Item), ct);
+                    var itemsToUpdate = extentsToStage
+                        .Select(e => new { Item = itemMap[e.Tags.BlobPath!], e.ExtentId })
+                        .Where(i => i.Item.State == TransactionItemState.QueuedForIngestion)
+                        .Select(i => new
+                        {
+                            Item = i.Item.UpdateState(TransactionItemState.Staged),
+                            i.ExtentId
+                        })
+                        .ToImmutableArray();
 
-                var extentIdsText =
-                    string.Join(", ", extentsToStage.Select(e => $"'{e.ExtentId}'"));
-                var tagExtentsCommandText = $@".alter extent tags ('{STAGED_TAG}') <|
+                    if (itemsToUpdate.Any())
+                    {
+                        foreach (var i in itemsToUpdate)
+                        {
+                            i.Item.ExtentId = i.ExtentId.ToString();
+                        }
+                        //  We first persist the transaction items:
+                        //  possible to have unmarked extents
+                        await _tableStatus.PersistNewItemsAsync(
+                            itemsToUpdate.Select(i => i.Item),
+                            ct);
+                    }
+
+                    var extentIdsText =
+                        string.Join(", ", extentsToStage.Select(e => $"'{e.ExtentId}'"));
+                    var tagExtentsCommandText = $@".alter-merge extent tags ('{STAGED_TAG}') <|
 print ExtentId=dynamic([{extentIdsText}])
 | mv-expand ExtentId to typeof(string)";
 
-                await _databaseGateway.ExecuteCommandAsync(tagExtentsCommandText, r=>0, ct);
+                    await _databaseGateway.ExecuteCommandAsync(tagExtentsCommandText, r => 0, ct);
+                }
+                else
+                {
+                    await Task.Delay(BETWEEN_EXTENT_PROBE_DELAY, ct);
+                }
+                await EnsureAllStagedAsync(stagingTable, startTxId, ct);
             }
         }
 
