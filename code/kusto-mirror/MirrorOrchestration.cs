@@ -29,7 +29,7 @@ namespace Kusto.Mirror.ConsoleApp
             string? requestDescription,
             CancellationToken ct)
         {
-            Trace.WriteLine("Initialize Storage connections...");
+            Trace.TraceInformation("Initialize Storage connections...");
 
             var storageCredentials = CreateStorageCredentials(parameters.AuthenticationMode);
             var globalTableStatus = await GlobalTableStatus.RetrieveAsync(
@@ -37,7 +37,7 @@ namespace Kusto.Mirror.ConsoleApp
                 storageCredentials,
                 ct);
 
-            Trace.WriteLine("Initialize Kusto Cluster connections...");
+            Trace.TraceInformation("Initialize Kusto Cluster connections...");
 
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.AuthenticationMode,
@@ -57,11 +57,11 @@ namespace Kusto.Mirror.ConsoleApp
 
             foreach (var db in databaseGroups)
             {
-                Trace.WriteLine($"Initialize Database '{db.Gateway.DatabaseName}' schemas...");
+                Trace.TraceInformation($"Initialize Database '{db.Gateway.DatabaseName}' schemas...");
                 await db.Gateway.CreateMergeDatabaseObjectsAsync(
                     parameters.CheckpointBlobUrl,
                     ct);
-                Trace.WriteLine($"Read Database '{db.Gateway.DatabaseName}' status...");
+                Trace.TraceInformation($"Read Database '{db.Gateway.DatabaseName}' status...");
 
                 var tableNames = db.Tables.Select(t => t.KustoTable);
                 var tableParameterizationMap = db.Tables.ToImmutableDictionary(

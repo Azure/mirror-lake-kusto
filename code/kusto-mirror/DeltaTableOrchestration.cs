@@ -13,33 +13,10 @@ namespace Kusto.Mirror.ConsoleApp
 {
     internal class DeltaTableOrchestration
     {
-        #region Inner types
-        private class IngestTags
-        {
-            public IngestTags(string tags)
-            {
-                const string INGEST_BY_PREFIX = "ingest-by:";
-
-                var individualTags = tags.Split(' ');
-
-                BlobPath = individualTags
-                    .Where(t => t.StartsWith(INGEST_BY_PREFIX))
-                    .Select(t => t.Substring(INGEST_BY_PREFIX.Length))
-                    .FirstOrDefault();
-                IsStaged = individualTags
-                    .Where(t => t == STAGED_TAG)
-                    .Any();
-            }
-
-            public string? BlobPath { get; }
-
-            public bool IsStaged { get; }
-        }
-        #endregion
-
         private const int EXTENT_PROBE_BATCH_SIZE = 5;
         private const int EXTENT_MOVE_BATCH_SIZE = 5;
-        private const string STAGED_TAG = "staged";
+        private const string INGEST_BY_PREFIX = "ingest-by:";
+        private const string STAGED_TAG = "km_staged";
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
         private static readonly TimeSpan BETWEEN_EXTENT_PROBE_DELAY = TimeSpan.FromSeconds(5);
@@ -97,7 +74,7 @@ namespace Kusto.Mirror.ConsoleApp
             TransactionLog logs,
             CancellationToken ct)
         {
-            Trace.WriteLine(
+            Trace.TraceInformation(
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
                 + $"to {logs.AllItems.First().EndTxId}");
 
@@ -146,7 +123,7 @@ namespace Kusto.Mirror.ConsoleApp
             stagingTable.StagingTableName =
                 CreateStagingTableName(stagingTable.StartTxId);
 
-            Trace.WriteLine(
+            Trace.TraceInformation(
                 $"Reseting transaction batch {template.StartTxId} to {template.EndTxId}");
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
         }
@@ -165,26 +142,29 @@ namespace Kusto.Mirror.ConsoleApp
                     .ToImmutableDictionary(a => a.BlobPath!);
                 //  Limit output, not to have a too heavy result set
                 var showTableText = $@".show table {stagingTable.Name} extents
-where tags !has '{STAGED_TAG}'
-| project ExtentId, Tags
+where tags !has '{STAGED_TAG}' and tags contains '{INGEST_BY_PREFIX}'
+| project tostring(ExtentId), Tags
 | take {EXTENT_PROBE_BATCH_SIZE}";
                 var extents = await _databaseGateway.ExecuteCommandAsync(
                     showTableText,
                     d => new
                     {
-                        ExtentId = (Guid)d["ExtentId"],
-                        Tags = new IngestTags((string)d["Tags"])
+                        ExtentId = (string)d["ExtentId"],
+                        BlobPath = ((string)d["Tags"])
+                        .Split(' ')
+                        .Where(t => t.StartsWith(INGEST_BY_PREFIX))
+                        .Select(t => t.Substring(INGEST_BY_PREFIX.Length))
+                        .First()
                     },
                     ct);
                 var extentsToStage = extents
-                    .Where(e => e.Tags.BlobPath != null)
-                    .Where(e => itemMap.ContainsKey(e.Tags.BlobPath!))
+                    .Where(e => itemMap.ContainsKey(e.BlobPath))
                     .ToImmutableArray();
 
                 if (extentsToStage.Any())
                 {
                     var itemsToUpdate = extentsToStage
-                        .Select(e => new { Item = itemMap[e.Tags.BlobPath!], e.ExtentId })
+                        .Select(e => new { Item = itemMap[e.BlobPath], e.ExtentId })
                         .Where(i => i.Item.State == TransactionItemState.QueuedForIngestion)
                         .Select(i => new
                         {
@@ -195,10 +175,6 @@ where tags !has '{STAGED_TAG}'
 
                     if (itemsToUpdate.Any())
                     {
-                        foreach (var i in itemsToUpdate)
-                        {
-                            i.Item.ExtentId = i.ExtentId.ToString();
-                        }
                         //  We first persist the transaction items:
                         //  possible to have unmarked extents
                         await _tableStatus.PersistNewItemsAsync(
@@ -218,6 +194,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 {
                     await Task.Delay(BETWEEN_EXTENT_PROBE_DELAY, ct);
                 }
+                //  Recursive
                 await EnsureAllStagedAsync(stagingTable, startTxId, ct);
             }
         }
@@ -228,10 +205,6 @@ print ExtentId=dynamic([{extentIdsText}])
             CancellationToken ct)
         {
             var logs = _tableStatus.GetBatch(startTxId);
-            var extentIds = logs.Adds
-                .Select(i => i.ExtentId!)
-                .Distinct()
-                .ToImmutableArray();
             var blobPathToRemove = logs.Removes
                 .Select(i => i.BlobPath!)
                 .Distinct()
@@ -241,41 +214,53 @@ print ExtentId=dynamic([{extentIdsText}])
             if (logs.Metadata != null)
             {
                 await EnsureTableSchemaAsync(logs.Metadata, ct);
+                await _tableStatus.PersistNewItemsAsync(
+                    new[] { logs.Metadata.UpdateState(TransactionItemState.Done) }, ct);
             }
 
-            await DropTagsAsync(stagingTable, ct);
-            await LoadExtentsAsync(stagingTable, extentIds, ct);
+            Trace.TraceInformation($"Loading extents in main table");
+            await LoadExtentsAsync(stagingTable, ct);
+            await DropTagsAsync(startTxId, ct);
             await removeBlobPathsTask;
 
             var newAdded = logs.Adds
-                .Select(item => item.UpdateState(TransactionItemState.Done));
+                .Select(item => item.UpdateState(TransactionItemState.Loaded));
             var newRemoved = logs.Removes
                 .Select(item => item.UpdateState(TransactionItemState.Done));
 
             await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
         }
 
-        private async Task DropTagsAsync(TableDefinition stagingTable, CancellationToken ct)
+        private async Task DropTagsAsync(long startTxId, CancellationToken ct)
         {
             var dropTagsCommandText = $@".drop extent tags <|
-.show table {stagingTable.Name} extents";
+.show table {_tableStatus.TableName} extents where tags contains '{INGEST_BY_PREFIX}'";
 
             await _databaseGateway.ExecuteCommandAsync(dropTagsCommandText, r => 0, ct);
+
+            var logs = _tableStatus.GetBatch(startTxId);
+            var newAdded = logs.Adds
+                .Select(item => item.UpdateState(TransactionItemState.Done));
+
+            await _tableStatus.PersistNewItemsAsync(newAdded, ct);
         }
 
-        private Task LoadExtentsAsync(
-            TableDefinition stagingTable,
-            IEnumerable<string> extentIds,
-            CancellationToken ct)
+        private async Task LoadExtentsAsync(TableDefinition stagingTable, CancellationToken ct)
         {
-            var extentIdsToMove = extentIds.Take(EXTENT_MOVE_BATCH_SIZE).ToImmutableArray();
-            var remainingExtentIds = extentIds.Skip(EXTENT_MOVE_BATCH_SIZE).ToImmutableArray();
+            do
+            {   //  Loop until we moved all extents
+                var moveCommandText = $@".move extents to table {_tableStatus.TableName} <|
+.show table {stagingTable.Name} extents where tags contains 'ingest-by'
+| take {EXTENT_MOVE_BATCH_SIZE}";
+                var results =
+                    await _databaseGateway.ExecuteCommandAsync(moveCommandText, r => 0, ct);
 
-            if (extentIdsToMove.Any())
-            {
-                var moveCommandText = $@"";
+                if (!results.Any())
+                {
+                    return;
+                }
             }
-            throw new NotImplementedException();
+            while (true);
         }
 
         private Task RemoveBlobPathsAsync(
@@ -290,6 +275,7 @@ print ExtentId=dynamic([{extentIdsText}])
             CancellationToken ct)
         {
             var commandText = $".drop table {stagingTable.Name}";
+
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
         }
 
@@ -433,6 +419,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 var newItems = toBeAdded
                     .Select(item => item.UpdateState(TransactionItemState.QueuedForIngestion));
 
+                Trace.TraceInformation($"Queuing {queueTasks.Count()} blobs for ingestion");
                 await Task.WhenAll(queueTasks);
                 await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }
@@ -495,20 +482,26 @@ print ExtentId=dynamic([{extentIdsText}])
 
         private async Task EnsureTableSchemaAsync(TransactionItem metadata, CancellationToken ct)
         {
-            if (metadata.State == TransactionItemState.Done)
+            if (metadata.State == TransactionItemState.Initial)
             {
-                var schema = metadata.Schema!.Append(new ColumnDefinition
-                {
-                    ColumnName = BLOB_PATH_COLUMN,
-                    ColumnType = "string"
-                });
+                var schema = metadata.Schema!
+                    .Append(new ColumnDefinition
+                    {
+                        ColumnName = BLOB_PATH_COLUMN,
+                        ColumnType = "string"
+                    })
+                    .Append(new ColumnDefinition
+                    {
+                        ColumnName = BLOB_ROW_NUMBER_COLUMN,
+                        ColumnType = "long"
+                    });
                 var columnsText = schema
                     .Select(c => $"['{c.ColumnName}']:{c.ColumnType}");
                 var schemaText = string.Join(", ", columnsText);
                 var createTableText = $".create-merge table {_tableStatus.TableName} ({schemaText})";
                 var newMetadata = metadata.UpdateState(TransactionItemState.Done);
 
-                Trace.WriteLine(
+                Trace.TraceInformation(
                     "Updating schema of Kusto table "
                     + $"'{_tableStatus.DatabaseName}.{_tableStatus.TableName}'");
 

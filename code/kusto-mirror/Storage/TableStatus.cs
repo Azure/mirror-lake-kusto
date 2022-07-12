@@ -36,7 +36,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             get
             {
                 var isBatchIncomplete = _statuses
-                    .Where(s => IsComplete(s.State))
+                    .Where(s => !IsComplete(s.State))
                     .Any();
 
                 return isBatchIncomplete;
@@ -58,7 +58,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         public TransactionLog GetEarliestIncompleteBatch()
         {
             var startTxId = _statuses
-                .Where(s => IsComplete(s.State))
+                .Where(s => !IsComplete(s.State))
                 .Select(s => s.StartTxId)
                 .First();
 
@@ -106,7 +106,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         private static bool IsComplete(TransactionItemState state)
         {
-            return state != TransactionItemState.Done;
+            return state == TransactionItemState.Done;
         }
     }
 }

@@ -99,20 +99,29 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             Func<IDataRecord, T> projection,
             CancellationToken ct)
         {
-            using (var reader = await _queryProvider.ExecuteQueryAsync(
-                database,
-                queryText,
-                _requestOptions != null
-                ? new ClientRequestProperties(_requestOptions, null)
-                {
-                    Application = _application
-                }
-                : null))
+            try
             {
-                var output = Project(reader, projection)
-                    .ToImmutableArray();
+                using (var reader = await _queryProvider.ExecuteQueryAsync(
+                    database,
+                    queryText,
+                    _requestOptions != null
+                    ? new ClientRequestProperties(_requestOptions, null)
+                    {
+                        Application = _application
+                    }
+                    : null))
+                {
+                    var output = Project(reader, projection)
+                        .ToImmutableArray();
 
-                return output;
+                    return output;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new MirrorException(
+                    $"Issue running the query '{queryText}' on database '{database}'",
+                    ex);
             }
         }
 
@@ -122,20 +131,29 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             Func<IDataRecord, T> projection,
             CancellationToken ct)
         {
-            using (var reader = await _commandProvider.ExecuteControlCommandAsync(
-                database,
-                commandText,
-                _requestOptions != null
-                ? new ClientRequestProperties(_requestOptions, null)
-                {
-                    Application = _application
-                }
-                : null))
+            try
             {
-                var output = Project(reader, projection)
-                    .ToImmutableArray();
+                using (var reader = await _commandProvider.ExecuteControlCommandAsync(
+                    database,
+                    commandText,
+                    _requestOptions != null
+                    ? new ClientRequestProperties(_requestOptions, null)
+                    {
+                        Application = _application
+                    }
+                    : null))
+                {
+                    var output = Project(reader, projection)
+                        .ToImmutableArray();
 
-                return output;
+                    return output;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new MirrorException(
+                    $"Issue running the command '{commandText}' on database '{database}'",
+                    ex);
             }
         }
 

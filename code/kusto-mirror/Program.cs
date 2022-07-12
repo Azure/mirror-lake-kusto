@@ -167,8 +167,8 @@ namespace Kusto.Mirror.ConsoleApp
         private static async Task RunOptionsAsync(CommandLineOptions options, string sessionId)
         {
             ConfigureTrace(options.Verbose);
-            Trace.WriteLine("");
-            Trace.WriteLine("Initialization...");
+            Trace.TraceInformation("");
+            Trace.TraceInformation("Initialization...");
 
             var parameters = MainParameterization.Create(options);
             var requestDescription = CreateRequestDescription(parameters, sessionId);
@@ -177,7 +177,7 @@ namespace Kusto.Mirror.ConsoleApp
 
             AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
-                Trace.WriteLine("Exiting process...");
+                Trace.TraceInformation("Exiting process...");
                 cancellationTokenSource.Cancel();
                 taskCompletionSource.Task.Wait();
             };
@@ -190,7 +190,7 @@ namespace Kusto.Mirror.ConsoleApp
                     requestDescription,
                     cancellationTokenSource.Token))
                 {
-                    Trace.WriteLine("Starting loop");
+                    Trace.TraceInformation("Starting loop");
 
                     await orchestration.RunAsync(cancellationTokenSource.Token);
                 }
@@ -239,11 +239,16 @@ namespace Kusto.Mirror.ConsoleApp
             var consoleListener = new TextWriterTraceListener(Console.Out)
             {
                 Filter = new MultiFilter(
-                    new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning),
-                    new SourceFilter("kusto-copy"))
+                    new EventTypeFilter(isVerbose ? SourceLevels.Verbose : SourceLevels.Information),
+                    new SourceFilter("kusto-mirror"))
+            };
+            var errorListener = new TextWriterTraceListener(Console.Error)
+            {
+                Filter = new EventTypeFilter(SourceLevels.Error)
             };
 
             Trace.Listeners.Add(consoleListener);
+            Trace.Listeners.Add(errorListener);
             if (isVerbose)
             {
                 Trace.TraceInformation("Verbose output enabled");

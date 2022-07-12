@@ -63,7 +63,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
             if (blocks.Count() > 0)
             {   //  Rewrite the content in blocks in case somebody edited the file
-                Trace.WriteLine("Rewrite checkpoint blob...");
+                Trace.TraceInformation("Rewrite checkpoint blob...");
 
                 var content = await bookmarkGateway.ReadAllContentAsync(ct);
                 var items = TransactionItem.FromCsv(content, true);

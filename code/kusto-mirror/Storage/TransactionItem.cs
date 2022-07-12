@@ -350,27 +350,24 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         /// <summary>Number of records in the blob to add.</summary>
         [Index(12)]
         public long? RecordCount { get; set; }
-
-        [Index(13)]
-        public string? ExtentId { get; set; }
         #endregion
 
         #region Schema only
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(14)]
+        [Index(13)]
         public Guid? DeltaTableId { get; set; }
 
         /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(15)]
+        [Index(14)]
         public string? DeltaTableName { get; set; }
 
         /// <summary>List of the partition columns.</summary>
-        [Index(16)]
+        [Index(15)]
         [TypeConverter(typeof(ListConverter<string>))]
         public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
-        [Index(17)]
+        [Index(16)]
         [TypeConverter(typeof(ListConverter<ColumnDefinition>))]
         public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion
