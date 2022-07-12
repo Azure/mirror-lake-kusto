@@ -37,7 +37,8 @@ namespace Kusto.Mirror.ConsoleApp
         }
         #endregion
 
-        private const int EXTENT_CHECK_BATCH_SIZE = 5;
+        private const int EXTENT_PROBE_BATCH_SIZE = 5;
+        private const int EXTENT_MOVE_BATCH_SIZE = 5;
         private const string STAGED_TAG = "staged";
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
@@ -166,7 +167,7 @@ namespace Kusto.Mirror.ConsoleApp
                 var showTableText = $@".show table {stagingTable.Name} extents
 where tags !has '{STAGED_TAG}'
 | project ExtentId, Tags
-| take {EXTENT_CHECK_BATCH_SIZE}";
+| take {EXTENT_PROBE_BATCH_SIZE}";
                 var extents = await _databaseGateway.ExecuteCommandAsync(
                     showTableText,
                     d => new
@@ -242,6 +243,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 await EnsureTableSchemaAsync(logs.Metadata, ct);
             }
 
+            await DropTagsAsync(stagingTable, ct);
             await LoadExtentsAsync(stagingTable, extentIds, ct);
             await removeBlobPathsTask;
 
@@ -253,11 +255,26 @@ print ExtentId=dynamic([{extentIdsText}])
             await _tableStatus.PersistNewItemsAsync(newAdded.Concat(newRemoved), ct);
         }
 
+        private async Task DropTagsAsync(TableDefinition stagingTable, CancellationToken ct)
+        {
+            var dropTagsCommandText = $@".drop extent tags <|
+.show table {stagingTable.Name} extents";
+
+            await _databaseGateway.ExecuteCommandAsync(dropTagsCommandText, r => 0, ct);
+        }
+
         private Task LoadExtentsAsync(
             TableDefinition stagingTable,
             IEnumerable<string> extentIds,
             CancellationToken ct)
         {
+            var extentIdsToMove = extentIds.Take(EXTENT_MOVE_BATCH_SIZE).ToImmutableArray();
+            var remainingExtentIds = extentIds.Skip(EXTENT_MOVE_BATCH_SIZE).ToImmutableArray();
+
+            if (extentIdsToMove.Any())
+            {
+                var moveCommandText = $@"";
+            }
             throw new NotImplementedException();
         }
 
@@ -265,7 +282,7 @@ print ExtentId=dynamic([{extentIdsText}])
             IEnumerable<string> blobPathToRemove,
             CancellationToken ct)
         {
-            throw new NotImplementedException();
+            return Task.CompletedTask;
         }
 
         private async Task DropStagingTableAsync(
