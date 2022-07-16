@@ -62,6 +62,10 @@ namespace Kusto.Mirror.ConsoleApp
                     {
                         await Task.Delay(BETWEEN_TX_PROBE_DELAY, ct);
                     }
+                    else
+                    {
+                        return;
+                    }
                 }
                 if (_tableStatus.IsBatchIncomplete)
                 {
