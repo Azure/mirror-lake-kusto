@@ -75,19 +75,23 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public TableDefinition GetTableDefinition(long upToTxId)
         {
-            var columns = _statuses
+            var schemaItem = _statuses
                 .Where(s => s.StartTxId <= upToTxId)
                 .Where(s => s.Action == TransactionItemAction.Schema)
                 .OrderByDescending(s => s.StartTxId)
-                .Select(s => s.Schema!)
                 .FirstOrDefault();
 
-            if (columns == null)
+            if (schemaItem == null)
             {
                 throw new MirrorException("No schema defined in transactions");
             }
+            if (schemaItem.Schema == null
+                || schemaItem.PartitionColumns == null)
+            {
+                throw new MirrorException("No schema or partition columns in the schema item");
+            }
 
-            return new TableDefinition(TableName, columns);
+            return new TableDefinition(TableName, schemaItem.Schema, schemaItem.PartitionColumns);
         }
 
         public TransactionLog Refresh(TransactionLog log)

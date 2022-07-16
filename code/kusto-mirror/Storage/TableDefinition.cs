@@ -13,15 +13,21 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
 
-        public TableDefinition(string tableName, IEnumerable<ColumnDefinition> columns)
+        public TableDefinition(
+            string tableName,
+            IEnumerable<ColumnDefinition> columns,
+            IEnumerable<string> partitionColumns)
         {
             Name = tableName;
             Columns = columns.ToImmutableArray();
+            PartitionColumns = partitionColumns.ToImmutableArray();
         }
 
         public string Name { get; }
         
         public IImmutableList<ColumnDefinition> Columns { get; }
+        
+        public IImmutableList<string> PartitionColumns { get; }
 
         public string KustoSchema
         {
@@ -49,12 +55,12 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                     ColumnType = "long"
                 });
 
-            return new TableDefinition(Name, moreColumns);
+            return new TableDefinition(Name, moreColumns, PartitionColumns);
         }
 
         public TableDefinition RenameTable(string tableName)
         {
-            return new TableDefinition(tableName, Columns);
+            return new TableDefinition(tableName, Columns, PartitionColumns);
         }
 
         public ImmutableArray<ColumnMapping> CreateIngestionMappings()
