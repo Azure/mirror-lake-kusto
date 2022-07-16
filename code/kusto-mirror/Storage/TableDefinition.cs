@@ -63,7 +63,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             return new TableDefinition(tableName, Columns, PartitionColumns);
         }
 
-        public ImmutableArray<ColumnMapping> CreateIngestionMappings()
+        public ImmutableArray<ColumnMapping> CreateIngestionMappings(
+            IImmutableDictionary<string, string> partitionValues)
         {
             var location =
                 new Dictionary<string, string>() { { "Transform", "SourceLocation" } };

@@ -58,7 +58,7 @@ namespace Kusto.Mirror.ConsoleApp
                     {
                         await PersistNewLogsAsync(newLogs, ct);
                     }
-                    else if(_continuousRun)
+                    else if (_continuousRun)
                     {
                         await Task.Delay(BETWEEN_TX_PROBE_DELAY, ct);
                     }
@@ -402,10 +402,17 @@ print ExtentId=dynamic([{extentIdsText}])
 
             if (toBeAdded.Any())
             {
-                var ingestionMappings = stagingTable.CreateIngestionMappings();
                 var queueTasks = toBeAdded
                     .Select(async item =>
                     {
+                        if (item.PartitionValues == null)
+                        {
+                            throw new ArgumentNullException(nameof(item.PartitionValues));
+                        }
+
+                        var ingestionMappings = stagingTable.CreateIngestionMappings(
+                            item.PartitionValues!);
+
                         await QueueItemAsync(stagingTable, item, ingestionMappings, ct);
                     })
                     .ToImmutableArray();
