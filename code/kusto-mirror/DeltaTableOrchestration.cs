@@ -72,40 +72,21 @@ namespace Kusto.Mirror.ConsoleApp
         private async Task ProcessTransactionBatchAsync(long startTxId, CancellationToken ct)
         {
             var logs = _tableStatus.GetBatch(startTxId);
-            var stagingTable = _tableStatus
-                .GetTableDefinition(startTxId)
-                .AddTrackingColumns()
-                .RenameTable(logs.StagingTable!.StagingTableName!);
 
             Trace.TraceInformation(
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
                 + $"to {logs.AllItems.First().EndTxId}");
 
-            if (logs.StartTxId == 0)
-            {
-                if (logs.Metadata == null)
-                {
-                    throw new InvalidOperationException("Transaction 0 should have meta data");
-                }
-                await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
-                logs = _tableStatus.Refresh(logs);
-            }
+            var stagingTable = _tableStatus
+                .GetTableDefinition(startTxId)
+                .AddTrackingColumns()
+                .RenameTable(logs.StagingTable!.StagingTableName!);
             var isStaging = await EnsureStagingTableAsync(
                 stagingTable,
                 logs.StagingTable!,
                 ct);
 
-            if (isStaging)
-            {
-                await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
-                await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
-                await EnsureAllLoadedAsync(stagingTable, logs.StartTxId, ct);
-                await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
-                Trace.TraceInformation(
-                    $"Table '{_tableStatus.TableName}', "
-                    + $"tx {logs.StartTxId} to {logs.EndTxId} processed");
-            }
-            else
+            if (!isStaging)
             {
                 var notDone = logs.AllItems.Where(l => l.State != TransactionItemState.Done);
 
@@ -121,15 +102,43 @@ namespace Kusto.Mirror.ConsoleApp
                 }
                 else
                 {
-                    await ResetTransactionBatchAsync(logs, ct);
+                    await ResetTransactionBatchAsync(startTxId, ct);
                 }
             }
+
+            await LoadTransactionBatchAsync(startTxId, stagingTable, ct);
+        }
+
+        private async Task LoadTransactionBatchAsync(
+            long startTxId,
+            TableDefinition stagingTable,
+            CancellationToken ct)
+        {
+            var logs = _tableStatus.GetBatch(startTxId);
+
+            if (logs.StartTxId == 0)
+            {
+                if (logs.Metadata == null)
+                {
+                    throw new InvalidOperationException("Transaction 0 should have meta data");
+                }
+                await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
+                logs = _tableStatus.Refresh(logs);
+            }
+            await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
+            await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
+            await EnsureAllLoadedAsync(stagingTable, logs.StartTxId, ct);
+            await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
+            Trace.TraceInformation(
+                $"Table '{_tableStatus.TableName}', "
+                + $"tx {logs.StartTxId} to {logs.EndTxId} processed");
         }
 
         private async Task ResetTransactionBatchAsync(
-            TransactionLog log,
+            long startTxId,
             CancellationToken ct)
         {
+            var log = _tableStatus.GetBatch(startTxId);
             var stagingTable =
                 log.StagingTable!.UpdateState(TransactionItemState.Initial);
             var resetAdds = log.Adds
@@ -141,8 +150,10 @@ namespace Kusto.Mirror.ConsoleApp
                 CreateStagingTableName(stagingTable.StartTxId);
 
             Trace.TraceInformation(
-                $"Reseting transaction batch {template.StartTxId} to {template.EndTxId}");
+                $"Resetting transaction batch {template.StartTxId} to {template.EndTxId}");
+
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
+            await ProcessTransactionBatchAsync(startTxId, ct);
         }
 
         private async Task EnsureAllStagedAsync(
