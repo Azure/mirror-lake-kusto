@@ -24,17 +24,20 @@ namespace Kusto.Mirror.ConsoleApp
         private readonly DeltaTableGateway _deltaTableGateway;
         private readonly DatabaseGateway _databaseGateway;
         private readonly bool _continuousRun;
+        private readonly bool _isFreeCluster;
 
         public DeltaTableOrchestration(
             TableStatus tableStatus,
             DeltaTableGateway deltaTableGateway,
             DatabaseGateway databaseGateway,
-            bool continuousRun)
+            bool continuousRun,
+            bool isFreeCluster)
         {
             _tableStatus = tableStatus;
             _deltaTableGateway = deltaTableGateway;
             _databaseGateway = databaseGateway;
             _continuousRun = continuousRun;
+            _isFreeCluster = isFreeCluster;
         }
 
         public string KustoDatabaseName => _tableStatus.DatabaseName;
@@ -370,9 +373,15 @@ print ExtentId=dynamic([{extentIdsText}])
 }}
 ```";
             //  Don't cache anything not to potentially overload the cache with big historical data
-            var cachePolicyText = $".alter table {stagingTableSchema.Name} policy caching hot = 0d";
+            var cachePolicyText =
+                _isFreeCluster
+                ? string.Empty
+                : $".alter table {stagingTableSchema.Name} policy caching hot = 0d";
             //  Don't delete anything in the table
-            var retentionPolicyText = @$".alter table {stagingTableSchema.Name} policy retention 
+            var retentionPolicyText =
+                _isFreeCluster
+                ? string.Empty
+                : @$".alter table {stagingTableSchema.Name} policy retention 
 ```
 {{
   ""SoftDeletePeriod"": ""10000000:0:0:0""
@@ -380,16 +389,20 @@ print ExtentId=dynamic([{extentIdsText}])
 ```";
             //  Staging table:  shouldn't be queried by normal users
             var restrictedViewPolicyText =
-                $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
+                _isFreeCluster
+                ? string.Empty
+                : $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
 
 {retentionPolicyText}
 
-{mergePolicyText}";
-            //{cachePolicyText}
-            //{restrictedViewPolicyText}";
+{mergePolicyText}
+
+{cachePolicyText}
+
+{restrictedViewPolicyText}";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
         }
@@ -406,6 +419,8 @@ print ExtentId=dynamic([{extentIdsText}])
 
             if (toBeAdded.Any())
             {
+                Trace.TraceInformation($"Queuing {toBeAdded.Count()} blobs for ingestion");
+
                 var queueTasks = toBeAdded
                     .Select(async item =>
                     {
@@ -423,7 +438,6 @@ print ExtentId=dynamic([{extentIdsText}])
                 var newItems = toBeAdded
                     .Select(item => item.UpdateState(TransactionItemState.QueuedForIngestion));
 
-                Trace.TraceInformation($"Queuing {queueTasks.Count()} blobs for ingestion");
                 await Task.WhenAll(queueTasks);
                 await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }

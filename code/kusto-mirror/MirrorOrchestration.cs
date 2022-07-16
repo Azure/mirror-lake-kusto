@@ -13,14 +13,10 @@ namespace Kusto.Mirror.ConsoleApp
     {
         private readonly IImmutableList<DeltaTableOrchestration> _orchestrations;
 
+        #region Constructors
         public MirrorOrchestration(IEnumerable<DeltaTableOrchestration> orchestrations)
         {
             _orchestrations = orchestrations.ToImmutableArray();
-        }
-
-        ValueTask IAsyncDisposable.DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
         }
 
         internal static async Task<MirrorOrchestration> CreationOrchestrationAsync(
@@ -44,6 +40,7 @@ namespace Kusto.Mirror.ConsoleApp
                 parameters.ClusterIngestionUri,
                 version,
                 requestDescription);
+            var isFreeCluster = await clusterGateway.IsFreeClusterAsync(ct);
             var databaseGroups = parameters
                 .DeltaTableParameterizations
                 .GroupBy(p => p.Database)
@@ -73,7 +70,8 @@ namespace Kusto.Mirror.ConsoleApp
                             storageCredentials,
                             tableParameterizationMap[t].DeltaTableStorageUrl),
                         db.Gateway,
-                        parameters.ContinuousRun));
+                        parameters.ContinuousRun,
+                        isFreeCluster));
 
                 orchestrations.AddRange(tableOrchestrations);
             }
@@ -97,6 +95,12 @@ namespace Kusto.Mirror.ConsoleApp
                     throw new NotSupportedException(
                         $"Unsupported authentication mode '{authenticationMode}'");
             }
+        }
+        #endregion
+
+        ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
         }
 
         internal async Task RunAsync(CancellationToken ct)

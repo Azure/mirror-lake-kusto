@@ -21,6 +21,7 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
         private readonly string _application;
         private readonly IImmutableList<KeyValuePair<string, object>>? _requestOptions;
 
+        #region Constructors
         public static async Task<KustoClusterGateway> CreateAsync(
             AuthenticationMode authenticationMode,
             Uri clusterIngestionUri,
@@ -69,6 +70,18 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             {
                 _application = string.Empty;
             }
+        }
+        #endregion
+
+        public async Task<bool> IsFreeClusterAsync(CancellationToken ct)
+        {
+            var results = await ExecuteCommandAsync(
+                string.Empty,
+                ".show version | project IsFree = toint(ServiceOffering has 'Personal')",
+                r => (int)r[0] != 0,
+                ct);
+
+            return results.First();
         }
 
         internal async Task IngestFromStorageAsync(
