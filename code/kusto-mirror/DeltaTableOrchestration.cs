@@ -82,7 +82,7 @@ namespace Kusto.Mirror.ConsoleApp
 
             var stagingTable = _tableStatus
                 .GetTableDefinition(startTxId)
-                .AddTrackingColumns()
+                .WithTrackingColumns()
                 .RenameTable(logs.StagingTable!.StagingTableName!);
             var isStaging = await EnsureStagingTableAsync(
                 stagingTable,

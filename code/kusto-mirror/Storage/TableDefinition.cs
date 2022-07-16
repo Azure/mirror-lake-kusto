@@ -35,7 +35,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             }
         }
 
-        public TableDefinition AddTrackingColumns()
+        public TableDefinition WithTrackingColumns()
         {
             var moreColumns = Columns
                 .Append(new ColumnDefinition
