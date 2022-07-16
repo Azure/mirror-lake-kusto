@@ -47,7 +47,7 @@ namespace Kusto.Mirror.ConsoleApp
                 if (_tableStatus.IsBatchIncomplete)
                 {
                     await ProcessTransactionBatchAsync(
-                        _tableStatus.GetEarliestIncompleteBatch(),
+                        _tableStatus.GetEarliestIncompleteBatchTxId(),
                         ct);
                 }
                 else
@@ -72,9 +72,11 @@ namespace Kusto.Mirror.ConsoleApp
         }
 
         private async Task ProcessTransactionBatchAsync(
-            TransactionLog logs,
+            long startTxId,
             CancellationToken ct)
         {
+            var logs = _tableStatus.GetBatch(startTxId);
+
             Trace.TraceInformation(
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
                 + $"to {logs.AllItems.First().EndTxId}");

@@ -55,14 +55,14 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             }
         }
 
-        public TransactionLog GetEarliestIncompleteBatch()
+        public long GetEarliestIncompleteBatchTxId()
         {
             var startTxId = _statuses
                 .Where(s => !IsComplete(s.State))
                 .Select(s => s.StartTxId)
                 .First();
 
-            return GetBatch(startTxId);
+            return startTxId;
         }
 
         public TransactionLog GetBatch(long startTxId)
