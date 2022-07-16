@@ -90,7 +90,7 @@ namespace Kusto.Mirror.ConsoleApp
                 await EnsureTableSchemaAsync(logs.Metadata, ct);
                 logs = _tableStatus.Refresh(logs);
             }
-            var targetTable = await GetTableSchemaAsync(logs.Metadata, ct);
+            var targetTable = _tableStatus.GetTableDefinition(startTxId);
             var stagingTableSchema = GetStagingTableSchema(
                 logs.StagingTable!.StagingTableName!,
                 targetTable);
@@ -301,33 +301,6 @@ print ExtentId=dynamic([{extentIdsText}])
             var newSchemaItem = stagingTable.UpdateState(TransactionItemState.Done);
 
             await _tableStatus.PersistNewItemsAsync(new[] { newSchemaItem }, ct);
-        }
-
-        private async Task<TableDefinition> GetTableSchemaAsync(
-            TransactionItem? metadata,
-            CancellationToken ct)
-        {
-            IEnumerable<ColumnDefinition> columns;
-
-            if (metadata != null && metadata.StartTxId == 0)
-            {
-                columns = metadata.Schema!;
-            }
-            else
-            {
-                var textSchema = await _databaseGateway.ExecuteCommandAsync(
-                    $".show table {_tableStatus.TableName} schema as csl",
-                    r => (string)r["Schema"],
-                    ct);
-
-                columns = textSchema
-                    .First()
-                    .Split(',')
-                    .Select(t => t.Split(':'))
-                    .Select(a => new ColumnDefinition { ColumnName = a[0], ColumnType = a[1] });
-            }
-
-            return new TableDefinition(_tableStatus.TableName, columns);
         }
 
         private TableDefinition GetStagingTableSchema(

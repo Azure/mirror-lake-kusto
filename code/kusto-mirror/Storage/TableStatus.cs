@@ -73,6 +73,23 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             return new TransactionLog(batchItems);
         }
 
+        public TableDefinition GetTableDefinition(long upToTxId)
+        {
+            var columns = _statuses
+                .Where(s => s.StartTxId <= upToTxId)
+                .Where(s => s.Action == TransactionItemAction.Schema)
+                .OrderByDescending(s => s.StartTxId)
+                .Select(s => s.Schema!)
+                .FirstOrDefault();
+
+            if (columns == null)
+            {
+                throw new MirrorException("No schema defined in transactions");
+            }
+
+            return new TableDefinition(TableName, columns);
+        }
+
         public TransactionLog Refresh(TransactionLog log)
         {
             var startTxId = log.StartTxId;
