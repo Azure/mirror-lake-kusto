@@ -10,6 +10,12 @@ namespace Kusto.Mirror.ConsoleApp
         [Option('a', "authMode", Required = false, HelpText = "Authentication mode:  AppSecret, AzCli or Browser")]
         public AuthenticationMode AuthenticationMode { get; set; } = AuthenticationMode.AzCli;
 
+        [Option(
+            "continuous",
+            Required = false,
+            HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after first batch")]
+        public bool ContinuousRun { get; set; } = false;
+
         [Option('c', "checkpoint", Required = false, HelpText = "Checkpoint CSV blob URL")]
         public string CheckpointBlobUrl { get; set; } = string.Empty;
 

@@ -72,7 +72,8 @@ namespace Kusto.Mirror.ConsoleApp
                         new DeltaTableGateway(
                             storageCredentials,
                             tableParameterizationMap[t].DeltaTableStorageUrl),
-                        db.Gateway));
+                        db.Gateway,
+                        parameters.ContinuousRun));
 
                 orchestrations.AddRange(tableOrchestrations);
             }

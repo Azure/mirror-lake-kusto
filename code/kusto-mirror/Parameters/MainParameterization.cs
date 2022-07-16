@@ -11,11 +11,13 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
     {
         public MainParameterization(
             AuthenticationMode authenticationMode,
+            bool continuousRun,
             Uri clusterQueryUri,
             Uri checkpointBlobUrl,
             IEnumerable<DeltaTableParameterization> deltaTableParameterizations)
         {
             AuthenticationMode = authenticationMode;
+            ContinuousRun = continuousRun;
             ClusterIngestionUri = clusterQueryUri;
             CheckpointBlobUrl = checkpointBlobUrl;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
@@ -62,12 +64,15 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
 
             return new MainParameterization(
                 options.AuthenticationMode,
+                options.ContinuousRun,
                 clusterQueryUri,
                 checkpointBlobUrl,
                 new[] { deltaTable });
         }
 
         public AuthenticationMode AuthenticationMode { get; }
+        
+        public bool ContinuousRun { get; }
 
         public Uri ClusterIngestionUri { get; }
 

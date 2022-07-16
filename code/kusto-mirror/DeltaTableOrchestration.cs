@@ -23,15 +23,18 @@ namespace Kusto.Mirror.ConsoleApp
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
         private readonly DatabaseGateway _databaseGateway;
+        private readonly bool _continuousRun;
 
         public DeltaTableOrchestration(
             TableStatus tableStatus,
             DeltaTableGateway deltaTableGateway,
-            DatabaseGateway databaseGateway)
+            DatabaseGateway databaseGateway,
+            bool continuousRun)
         {
             _tableStatus = tableStatus;
             _deltaTableGateway = deltaTableGateway;
             _databaseGateway = databaseGateway;
+            _continuousRun = continuousRun;
         }
 
         public string KustoDatabaseName => _tableStatus.DatabaseName;
@@ -42,13 +45,7 @@ namespace Kusto.Mirror.ConsoleApp
         {
             while (!ct.IsCancellationRequested)
             {
-                if (_tableStatus.IsBatchIncomplete)
-                {
-                    await ProcessTransactionBatchAsync(
-                        _tableStatus.GetEarliestIncompleteBatchTxId(),
-                        ct);
-                }
-                else
+                if (!_tableStatus.IsBatchIncomplete)
                 {
                     var currentTxId = _tableStatus.LastTxId;
                     var newLogs = await _deltaTableGateway.GetTransactionLogsAsync(
@@ -61,10 +58,16 @@ namespace Kusto.Mirror.ConsoleApp
                     {
                         await PersistNewLogsAsync(newLogs, ct);
                     }
-                    else
+                    else if(_continuousRun)
                     {
                         await Task.Delay(BETWEEN_TX_PROBE_DELAY, ct);
                     }
+                }
+                if (_tableStatus.IsBatchIncomplete)
+                {
+                    await ProcessTransactionBatchAsync(
+                        _tableStatus.GetEarliestIncompleteBatchTxId(),
+                        ct);
                 }
             }
         }
