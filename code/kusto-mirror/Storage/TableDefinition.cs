@@ -10,23 +10,36 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 {
     internal class TableDefinition
     {
+        private static readonly Dictionary<string, string> EMPTY_MAP =
+            new Dictionary<string, string>();
+
         private const string BLOB_PATH_COLUMN = "KM_BlobPath";
         private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
 
+        #region Constructors
         public TableDefinition(
             string tableName,
             IEnumerable<ColumnDefinition> columns,
             IEnumerable<string> partitionColumns)
+            : this(tableName, columns.ToImmutableArray(), partitionColumns.ToImmutableArray())
         {
-            Name = tableName;
-            Columns = columns.ToImmutableArray();
-            PartitionColumns = partitionColumns.ToImmutableArray();
         }
 
+        private TableDefinition(
+            string tableName,
+            IImmutableList<ColumnDefinition> columns,
+            IImmutableList<string> partitionColumns)
+        {
+            Name = tableName;
+            Columns = columns;
+            PartitionColumns = partitionColumns;
+        }
+        #endregion
+
         public string Name { get; }
-        
+
         public IImmutableList<ColumnDefinition> Columns { get; }
-        
+
         public IImmutableList<string> PartitionColumns { get; }
 
         public string KustoSchema
@@ -36,7 +49,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 var columnsText = Columns
                     .Select(c => $"['{c.ColumnName}']:{c.ColumnType}");
                 var schemaText = string.Join(", ", columnsText);
-         
+
                 return schemaText;
             }
         }
@@ -53,7 +66,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 {
                     ColumnName = BLOB_ROW_NUMBER_COLUMN,
                     ColumnType = "long"
-                });
+                })
+                .ToImmutableArray();
 
             return new TableDefinition(Name, moreColumns, PartitionColumns);
         }
@@ -79,7 +93,10 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                     ? location
                     : c.ColumnName == BLOB_ROW_NUMBER_COLUMN
                     ? lineNumber
-                    : new Dictionary<string, string>()
+                    : partitionValues.ContainsKey(c.ColumnName)
+                    ? new Dictionary<string, string>() {
+                        { "ConstValue", partitionValues[c.ColumnName] } }
+                    : EMPTY_MAP
                 })
                 .ToImmutableArray();
 
