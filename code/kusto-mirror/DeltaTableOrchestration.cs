@@ -17,8 +17,6 @@ namespace Kusto.Mirror.ConsoleApp
         private const int EXTENT_MOVE_BATCH_SIZE = 5;
         private const string INGEST_BY_PREFIX = "ingest-by:";
         private const string STAGED_TAG = "km_staged";
-        private const string BLOB_PATH_COLUMN = "KM_BlobPath";
-        private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
         private static readonly TimeSpan BETWEEN_TX_PROBE_DELAY = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan BETWEEN_EXTENT_PROBE_DELAY = TimeSpan.FromSeconds(5);
 
@@ -71,11 +69,13 @@ namespace Kusto.Mirror.ConsoleApp
             }
         }
 
-        private async Task ProcessTransactionBatchAsync(
-            long startTxId,
-            CancellationToken ct)
+        private async Task ProcessTransactionBatchAsync(long startTxId, CancellationToken ct)
         {
             var logs = _tableStatus.GetBatch(startTxId);
+            var stagingTable = _tableStatus
+                .GetTableDefinition(startTxId)
+                .AddTrackingColumns()
+                .RenameTable(logs.StagingTable!.StagingTableName!);
 
             Trace.TraceInformation(
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
@@ -87,23 +87,19 @@ namespace Kusto.Mirror.ConsoleApp
                 {
                     throw new InvalidOperationException("Transaction 0 should have meta data");
                 }
-                await EnsureTableSchemaAsync(logs.Metadata, ct);
+                await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
                 logs = _tableStatus.Refresh(logs);
             }
-            var targetTable = _tableStatus.GetTableDefinition(startTxId);
-            var stagingTableSchema = GetStagingTableSchema(
-                logs.StagingTable!.StagingTableName!,
-                targetTable);
             var isStaging = await EnsureStagingTableAsync(
-                stagingTableSchema,
+                stagingTable,
                 logs.StagingTable!,
                 ct);
 
             if (isStaging)
             {
-                await EnsureAllQueuedAsync(stagingTableSchema, logs.StartTxId, ct);
-                await EnsureAllStagedAsync(stagingTableSchema, logs.StartTxId, ct);
-                await EnsureAllLoadedAsync(stagingTableSchema, logs.StartTxId, ct);
+                await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
+                await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
+                await EnsureAllLoadedAsync(stagingTable, logs.StartTxId, ct);
                 await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
                 Trace.TraceInformation(
                     $"Table '{_tableStatus.TableName}', "
@@ -234,9 +230,7 @@ print ExtentId=dynamic([{extentIdsText}])
 
             if (logs.Metadata != null)
             {
-                await EnsureTableSchemaAsync(logs.Metadata, ct);
-                await _tableStatus.PersistNewItemsAsync(
-                    new[] { logs.Metadata.UpdateState(TransactionItemState.Done) }, ct);
+                await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
             }
 
             Trace.TraceInformation($"Loading extents in main table");
@@ -301,25 +295,6 @@ print ExtentId=dynamic([{extentIdsText}])
             var newSchemaItem = stagingTable.UpdateState(TransactionItemState.Done);
 
             await _tableStatus.PersistNewItemsAsync(new[] { newSchemaItem }, ct);
-        }
-
-        private TableDefinition GetStagingTableSchema(
-            string stagingTableName,
-            TableDefinition targetTable)
-        {
-            var moreColumns = targetTable.Columns
-                .Append(new ColumnDefinition
-                {
-                    ColumnName = BLOB_PATH_COLUMN,
-                    ColumnType = "string"
-                })
-                .Append(new ColumnDefinition
-                {
-                    ColumnName = BLOB_ROW_NUMBER_COLUMN,
-                    ColumnType = "long"
-                });
-
-            return new TableDefinition(stagingTableName, moreColumns);
         }
 
         private async Task<bool> EnsureStagingTableAsync(
@@ -413,7 +388,7 @@ print ExtentId=dynamic([{extentIdsText}])
 
             if (toBeAdded.Any())
             {
-                var ingestionMappings = CreateIngestionMappings(stagingTable);
+                var ingestionMappings = stagingTable.CreateIngestionMappings();
                 var queueTasks = toBeAdded
                     .Select(async item =>
                     {
@@ -460,57 +435,24 @@ print ExtentId=dynamic([{extentIdsText}])
                 ct);
         }
 
-        private static ImmutableArray<ColumnMapping> CreateIngestionMappings(
-            TableDefinition stagingTable)
-        {
-            var location =
-                new Dictionary<string, string>() { { "Transform", "SourceLocation" } };
-            var lineNumber =
-                new Dictionary<string, string>() { { "Transform", "SourceLineNumber" } };
-            var ingestionMappings = stagingTable
-                .Columns
-                .Select(c => new ColumnMapping()
-                {
-                    ColumnName = c.ColumnName,
-                    ColumnType = c.ColumnType,
-                    Properties = c.ColumnName == BLOB_PATH_COLUMN
-                    ? location
-                    : c.ColumnName == BLOB_ROW_NUMBER_COLUMN
-                    ? lineNumber
-                    : new Dictionary<string, string>()
-                })
-                .ToImmutableArray();
-
-            return ingestionMappings;
-        }
-
-        private async Task EnsureTableSchemaAsync(TransactionItem metadata, CancellationToken ct)
+        private async Task EnsureLandingTableSchemaAsync(
+            TableDefinition stagingTable,
+            TransactionItem metadata,
+            CancellationToken ct)
         {
             if (metadata.State == TransactionItemState.Initial)
             {
-                var schema = metadata.Schema!
-                    .Append(new ColumnDefinition
-                    {
-                        ColumnName = BLOB_PATH_COLUMN,
-                        ColumnType = "string"
-                    })
-                    .Append(new ColumnDefinition
-                    {
-                        ColumnName = BLOB_ROW_NUMBER_COLUMN,
-                        ColumnType = "long"
-                    });
-                var columnsText = schema
-                    .Select(c => $"['{c.ColumnName}']:{c.ColumnType}");
-                var schemaText = string.Join(", ", columnsText);
-                var createTableText = $".create-merge table {_tableStatus.TableName} ({schemaText})";
-                var newMetadata = metadata.UpdateState(TransactionItemState.Done);
+                var createTableText = $".create-merge table {_tableStatus.TableName}"
+                    + $" ({stagingTable.KustoSchema})";
 
                 Trace.TraceInformation(
                     "Updating schema of Kusto table "
                     + $"'{_tableStatus.DatabaseName}.{_tableStatus.TableName}'");
 
                 await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
-                await _tableStatus.PersistNewItemsAsync(new[] { newMetadata }, ct);
+                await _tableStatus.PersistNewItemsAsync(
+                    new[] { metadata.UpdateState(TransactionItemState.Done) },
+                    ct);
             }
         }
 
