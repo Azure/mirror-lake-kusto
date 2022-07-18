@@ -278,7 +278,10 @@ print ExtentId=dynamic([{extentIdsText}])
             var newAdded = logs.Adds
                 .Select(item => item.UpdateState(TransactionItemState.Done));
 
-            await _tableStatus.PersistNewItemsAsync(newAdded, ct);
+            if (newAdded.Any())
+            {
+                await _tableStatus.PersistNewItemsAsync(newAdded, ct);
+            }
         }
 
         private async Task LoadExtentsAsync(TableDefinition stagingTable, CancellationToken ct)

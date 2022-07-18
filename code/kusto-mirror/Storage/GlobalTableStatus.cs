@@ -142,6 +142,12 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             CancellationToken ct)
         {
             var itemsContent = TransactionItem.ToCsv(items);
+
+            if (itemsContent.Length == 0)
+            {
+                throw new ArgumentException("Is empty", nameof(items));
+            }
+
             var tx = new BookmarkTransaction(new[] { itemsContent }, null, null);
             var result = await _bookmarkGateway.ApplyTransactionAsync(tx, ct);
             var newBlockId = result.AddedBlockIds.First();
