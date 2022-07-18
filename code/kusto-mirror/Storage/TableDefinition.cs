@@ -38,6 +38,8 @@ namespace Kusto.Mirror.ConsoleApp.Storage
 
         public string Name { get; }
 
+        public string BlobPathColumnName => BLOB_PATH_COLUMN;
+
         public IImmutableList<ColumnDefinition> Columns { get; }
 
         public IImmutableList<string> PartitionColumns { get; }
@@ -78,10 +80,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
         }
 
         public ImmutableArray<ColumnMapping> CreateIngestionMappings(
+            string blobPath,
             IImmutableDictionary<string, string> partitionValues)
         {
             var location =
-                new Dictionary<string, string>() { { "Transform", "SourceLocation" } };
+                new Dictionary<string, string>() { { "ConstValue", blobPath } };
             var lineNumber =
                 new Dictionary<string, string>() { { "Transform", "SourceLineNumber" } };
             var ingestionMappings = Columns

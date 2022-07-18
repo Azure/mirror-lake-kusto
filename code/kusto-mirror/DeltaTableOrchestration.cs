@@ -87,10 +87,10 @@ namespace Kusto.Mirror.ConsoleApp
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
                 + $"to {logs.AllItems.First().EndTxId}");
 
-            var stagingTable = _tableStatus
+            var mainTable = _tableStatus
                 .GetTableDefinition(startTxId)
-                .WithTrackingColumns()
-                .RenameTable(logs.StagingTable!.StagingTableName!);
+                .WithTrackingColumns();
+            var stagingTable = mainTable.RenameTable(logs.StagingTable!.StagingTableName!);
             var isStaging = await EnsureStagingTableAsync(
                 stagingTable,
                 logs.StagingTable!,
@@ -116,11 +116,12 @@ namespace Kusto.Mirror.ConsoleApp
                 }
             }
 
-            await LoadTransactionBatchAsync(startTxId, stagingTable, ct);
+            await LoadTransactionBatchAsync(startTxId, mainTable, stagingTable, ct);
         }
 
         private async Task LoadTransactionBatchAsync(
             long startTxId,
+            TableDefinition mainTable,
             TableDefinition stagingTable,
             CancellationToken ct)
         {
@@ -137,7 +138,7 @@ namespace Kusto.Mirror.ConsoleApp
             }
             await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
             await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
-            await EnsureAllLoadedAsync(stagingTable, logs.StartTxId, ct);
+            await EnsureAllLoadedAsync(mainTable, stagingTable, logs.StartTxId, ct);
             await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
             Trace.TraceInformation(
                 $"Table '{_tableStatus.TableName}', "
@@ -238,6 +239,7 @@ print ExtentId=dynamic([{extentIdsText}])
         }
 
         private async Task EnsureAllLoadedAsync(
+            TableDefinition mainTable,
             TableDefinition stagingTable,
             long startTxId,
             CancellationToken ct)
@@ -247,7 +249,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 .Select(i => i.BlobPath!)
                 .Distinct()
                 .ToImmutableArray();
-            var removeBlobPathsTask = RemoveBlobPathsAsync(blobPathToRemove, ct);
+            var removeBlobPathsTask = RemoveBlobPathsAsync(mainTable, blobPathToRemove, ct);
 
             if (logs.Metadata != null)
             {
@@ -297,11 +299,22 @@ print ExtentId=dynamic([{extentIdsText}])
             while (true);
         }
 
-        private Task RemoveBlobPathsAsync(
+        private async Task RemoveBlobPathsAsync(
+            TableDefinition mainTable,
             IEnumerable<string> blobPathToRemove,
             CancellationToken ct)
         {
-            return Task.CompletedTask;
+            if (blobPathToRemove.Any())
+            {
+                var commandTextPrefix = @$".delete table {mainTable.Name} records <|
+{mainTable.Name}";
+                var pathColumn = mainTable.BlobPathColumnName;
+                var predicates = blobPathToRemove
+                    .Select(b => $"{Environment.NewLine}| where {pathColumn}=='{b}'");
+                var commandText = commandTextPrefix + string.Join(string.Empty, predicates);
+
+                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+            }
         }
 
         private async Task DropStagingTableAsync(
@@ -430,6 +443,7 @@ print ExtentId=dynamic([{extentIdsText}])
                         }
 
                         var ingestionMappings = stagingTable.CreateIngestionMappings(
+                            item.BlobPath!,
                             item.PartitionValues!);
 
                         await QueueItemAsync(stagingTable, item, ingestionMappings, ct);
