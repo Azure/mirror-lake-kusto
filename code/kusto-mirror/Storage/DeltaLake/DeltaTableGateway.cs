@@ -1,20 +1,28 @@
 ﻿using Azure.Core;
-using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
-using Azure.Storage.Sas;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
 {
     internal class DeltaTableGateway
     {
+        #region Inner Types
+        private class Checkpoint
+        {
+            public long Version { get; set; }
+
+            public long Size { get; set; }
+        }
+        #endregion
+
         private readonly BlobContainerClient _blobContainerClient;
         private readonly string _transactionFolderPrefix;
 
@@ -58,11 +66,16 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             var lastCheckpointBlob = _blobContainerClient.GetBlobClient(lastCheckpointName);
             var lastCheckpointExists = await lastCheckpointBlob.ExistsAsync();
 
-            //if (lastCheckpointExists)
-            //{
-            //    throw new NotImplementedException();
-            //}
-            //else
+            if (lastCheckpointExists.Value)
+            {
+                var cummulativeTxLog = await ExtractCummulativeTxLogAsync(
+                    lastCheckpointBlob,
+                    kustoDatabaseName,
+                    kustoTableName);
+
+                throw new NotImplementedException();
+            }
+            else
             {
                 var blobPageable = _blobContainerClient.GetBlobsAsync(
                     BlobTraits.None,
@@ -96,6 +109,28 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             }
         }
 
+        private async Task<TransactionLog> ExtractCummulativeTxLogAsync(
+            BlobClient lastCheckpointBlob,
+            string kustoDatabaseName,
+            string kustoTableName)
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var checkpointResult = await lastCheckpointBlob.DownloadContentAsync();
+            var checkpointText = checkpointResult.Value.Content.ToString();
+            var checkpoint = JsonSerializer.Deserialize<Checkpoint>(checkpointText, options);
+            var paddedVersion = checkpoint!.Version.ToString("D20");
+            var parquetName = $"{_transactionFolderPrefix}/{paddedVersion}.checkpoint.parquet";
+            var parquetBlob = _blobContainerClient.GetBlobClient(parquetName);
+            var parquetResult = await parquetBlob.DownloadContentAsync();
+            var log = TransactionLogEntry.LoadDeltaLogFromParquet(
+                42,
+                kustoDatabaseName,
+                kustoTableName,
+                parquetResult.Value.Content.ToStream());
+
+            throw new NotImplementedException();
+        }
+
         private async Task<TransactionLog> LoadTransactionBlobAsync(
             long txId,
             string blobName,
@@ -108,7 +143,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                 var downloadResult = await blobClient.DownloadContentAsync();
                 var blobText = downloadResult.Value.Content.ToString();
 
-                return TransactionLogEntry.LoadDeltaLog(
+                return TransactionLogEntry.LoadDeltaLogFromJson(
                     txId,
                     kustoDatabaseName,
                     kustoTableName,
