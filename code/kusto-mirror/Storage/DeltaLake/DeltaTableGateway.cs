@@ -123,7 +123,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             var parquetBlob = _blobContainerClient.GetBlobClient(parquetName);
             var parquetResult = await parquetBlob.DownloadContentAsync();
             var log = TransactionLogEntry.LoadDeltaLogFromParquet(
-                42,
+                checkpoint!.Version,
                 kustoDatabaseName,
                 kustoTableName,
                 parquetResult.Value.Content.ToStream());

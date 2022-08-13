@@ -1,4 +1,5 @@
 ﻿using Parquet;
+using Parquet.Data;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -354,15 +355,25 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             using (var parquetReader = new ParquetReader(parquetStream))
             {
                 var metadataCollection = LoadMetadataFromParquet(parquetReader);
+                var addCollection = LoadAddFromParquet(parquetReader);
 
                 if (!metadataCollection.Any())
                 {
                     throw new MirrorException("No metadata in checkpoint");
                 }
 
-                var metadata = metadataCollection.First();
+                var transactionMetadata = metadataCollection.Any()
+                    ? LoadMetadata(metadataCollection.First(), txId, kustoDatabaseName, kustoTableName)
+                    : null;
+                var transactionAdds = addCollection
+                    .Select(a => LoadAdd(a, txId, kustoDatabaseName, kustoTableName))
+                    .ToImmutableArray();
 
-                throw new NotImplementedException();
+                return new TransactionLog(
+                    transactionMetadata,
+                    null,
+                    transactionAdds,
+                    ImmutableArray<TransactionItem>.Empty);
             }
         }
 
@@ -370,37 +381,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             ParquetReader parquetReader)
         {
             var dataFields = parquetReader.Schema.GetDataFields();
-            var QmetaColumns = dataFields
-                .Zip(Enumerable.Range(0, dataFields.Length))
-                .Where(d => d.First.Path.StartsWith("metaData."))
-                .ToDictionary(d => d.First.Path, d => d.Second);
-            var idColumnIndex = QmetaColumns["metaData.id"];
-            //var nameColumn = (string[])(metaColumns["metaData.name"].Data);
-            //var formatProviderColumn =
-            //    (string[])(metaColumns["metaData.format.provider"].Data);
-            //var formatOptionsKeysColumn =
-            //    (string[])(metaColumns["metaData.format.options.key_value.key"].Data);
-            //var formatOptionsValuesColumn =
-            //    (string[])(metaColumns["metaData.format.options.key_value.value"].Data);
-            //var schemaStringColumn = (string[])(metaColumns["metaData.schemaString"].Data);
-            var partitionsColumnIndex = QmetaColumns["metaData.partitionColumns.list.element"];
-            //var creationTimeColumn =
-            //    (long?[])(metaColumns["metaData.createdTime"].Data);
-            //var configurationKeysColumn =
-            //    (string[])(metaColumns["metaData.configuration.key_value.key"].Data);
-            //var configurationValuesColumn =
-            //    (string[])(metaColumns["metaData.configuration.key_value.value"].Data);
-            //var table = parquetReader.ReadAsTable();
-
-            //foreach (var row in table)
-            //{
-            //    if (row[idColumnIndex] != null)
-            //    {
-            //        var q = row[partitionsColumnIndex];
-
-            //        throw new NotImplementedException();
-            //    }
-            //}
 
             for (int i = 0; i != parquetReader.RowGroupCount; ++i)
             {
@@ -420,7 +400,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                         (string[])(metaColumns["metaData.format.options.key_value.value"].Data);
                     var schemaStringColumn = (string[])(metaColumns["metaData.schemaString"].Data);
                     var partitionsColumn =
-                        (string[])(metaColumns["metaData.partitionColumns.list.element"].Data);
+                        GetListOfLists<string>(metaColumns["metaData.partitionColumns.list.element"]);
                     var creationTimeColumn =
                         (long?[])(metaColumns["metaData.createdTime"].Data);
                     var configurationKeysColumn =
@@ -443,12 +423,111 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
                                 },
                                 Configuration = null,
                                 CreatedTime = creationTimeColumn[j] ?? 0,
-                                PartitionColumns = new[] { partitionsColumn[j] },
+                                PartitionColumns = partitionsColumn[j],
                                 SchemaString = schemaStringColumn[j]
                             };
                         }
                     }
                 }
+            }
+        }
+
+        private static IEnumerable<AddData> LoadAddFromParquet(ParquetReader parquetReader)
+        {
+            var dataFields = parquetReader.Schema.GetDataFields();
+
+            for (int i = 0; i != parquetReader.RowGroupCount; ++i)
+            {
+                using (var groupReader = parquetReader.OpenRowGroupReader(i))
+                {
+                    var metaColumns = dataFields
+                        .Where(d => d.Path.StartsWith("add."))
+                        .Select(groupReader.ReadColumn)
+                        .ToDictionary(c => c.Field.Path);
+                    var pathColumn = (string[])(metaColumns["add.path"].Data);
+                    var sizeColumn = (long?[])(metaColumns["add.size"].Data);
+                    var modificationTimeColumn = (long?[])(metaColumns["add.modificationTime"].Data);
+                    var dataChangeColumn = (bool?[])(metaColumns["add.dataChange"].Data);
+                    var tagMap = GetMaps<string, string>(
+                        metaColumns["add.tags.key_value.key"],
+                        metaColumns["add.tags.key_value.value"]);
+                    var statsColumn = (string[])(metaColumns["add.stats"].Data);
+                    var partitionMaps = GetMaps<string, string>(
+                        metaColumns["add.partitionValues.key_value.key"],
+                        metaColumns["add.partitionValues.key_value.value"]);
+
+                    for (int j = 0; j != pathColumn.Length; ++j)
+                    {
+                        if (pathColumn[j] != null)
+                        {
+                            yield return new AddData
+                            {
+                                Path = (string)pathColumn[j],
+                                PartitionValues = partitionMaps[j],
+                                Size = sizeColumn[j]!.Value,
+                                ModificationTime = modificationTimeColumn[j]!.Value,
+                                DataChange = dataChangeColumn[j]!.Value,
+                                Stats = statsColumn[j],
+                                Tags = tagMap[j]
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        private static IImmutableList<ImmutableDictionary<U, V>> GetMaps<U, V>(
+            DataColumn keyColumn,
+            DataColumn valueColumn)
+            where U : notnull
+        {
+            var keysList = GetListOfLists<U>(keyColumn);
+            var valuesList = GetListOfLists<V>(valueColumn);
+            var dictionaries = keysList
+                .Zip(valuesList)
+                .Select(z => z.First.Zip(z.Second))
+                .Select(l => l.Count() == 1 && l.First().First == null
+                ? ImmutableDictionary<U, V>.Empty
+                : l.ToImmutableDictionary(c => c.First, c => c.Second));
+            var dictionaryList = dictionaries.ToImmutableArray();
+
+            return dictionaryList;
+        }
+
+        private static IImmutableList<T[]> GetListOfLists<T>(DataColumn column)
+        {
+            if (column.Data.Length > 0)
+            {
+                var builder = ImmutableArray<T[]>.Empty.ToBuilder();
+                var currentArray = new List<T>();
+
+                if (!column.HasRepetitions)
+                {
+                    throw new ArgumentException(nameof(column), "Has no repetition");
+                }
+                if (column.Data.Length != column.RepetitionLevels.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(column), "Incompatible length");
+                }
+                for (int i = 0; i != column.Data.Length; ++i)
+                {
+                    if (column.RepetitionLevels[i] == 0 && currentArray.Any())
+                    {
+                        builder.Add(currentArray.ToArray());
+                        currentArray.Clear();
+                    }
+                    currentArray.Add(((T[])column.Data)[i]);
+                }
+                if (currentArray.Any())
+                {
+                    builder.Add(currentArray.ToArray());
+                }
+
+                return builder.ToImmutable();
+            }
+            else
+            {
+                return ImmutableArray<T[]>.Empty;
             }
         }
         #endregion
