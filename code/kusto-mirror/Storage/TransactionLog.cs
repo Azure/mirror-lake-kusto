@@ -105,6 +105,11 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 remainingRemoves);
         }
 
+        public TransactionLog Delta(TransactionLog currentLog)
+        {
+            throw new NotImplementedException();
+        }
+
         public static TransactionLog Coalesce(IEnumerable<TransactionLog> txLogs)
         {
             var span = new Span<TransactionLog>(txLogs.ToArray());

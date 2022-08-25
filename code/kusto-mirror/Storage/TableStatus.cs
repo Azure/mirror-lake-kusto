@@ -43,18 +43,6 @@ namespace Kusto.Mirror.ConsoleApp.Storage
             }
         }
 
-        public int? LastTxId
-        {
-            get
-            {
-                var lastTxId = _statuses.Any()
-                    ? (int?)_statuses.Max(s => s.EndTxId)
-                    : null;
-
-                return lastTxId;
-            }
-        }
-
         public long GetEarliestIncompleteBatchTxId()
         {
             var startTxId = _statuses
@@ -63,6 +51,23 @@ namespace Kusto.Mirror.ConsoleApp.Storage
                 .First();
 
             return startTxId;
+        }
+
+        public TransactionLog? GetAll()
+        {
+            if(_statuses.Any())
+            {
+                var logs = _statuses
+                    .GroupBy(s => s.StartTxId)
+                    .Select(g => new TransactionLog(g));
+                var all = TransactionLog.Coalesce(logs);
+
+                return all;
+            }
+            else
+            {
+                return null;
+            }
         }
 
         public TransactionLog GetBatch(long startTxId)

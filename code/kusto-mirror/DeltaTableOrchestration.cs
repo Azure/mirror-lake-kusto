@@ -50,23 +50,24 @@ namespace Kusto.Mirror.ConsoleApp
             {
                 if (!_tableStatus.IsBatchIncomplete)
                 {
-                    var currentTxId = _tableStatus.LastTxId;
-                    var newLogs = await _deltaTableGateway.GetTransactionLogsAsync(
-                        currentTxId + 1,
+                    var currentLog = _tableStatus.GetAll();
+                    var newLogs = await _deltaTableGateway.GetNextTransactionLogAsync(
+                        currentLog,
                         KustoDatabaseName,
                         KustoTableName,
                         ct);
 
-                    if (newLogs.Any())
-                    {
+                    if (newLogs != null)
+                    {   //  Persists the logs and loop again to process them
                         await PersistNewLogsAsync(newLogs, ct);
                     }
                     else if (_continuousRun)
-                    {
+                    {   //  If continuous run, we wait a little before probing for new logs again
                         await Task.Delay(BETWEEN_TX_PROBE_DELAY, ct);
                     }
                     else
-                    {
+                    {   //  If not continuous log, that's the end of the road since there
+                        //  isn't any new logs
                         return;
                     }
                 }
@@ -512,12 +513,9 @@ print ExtentId=dynamic([{extentIdsText}])
             }
         }
 
-        private async Task PersistNewLogsAsync(
-            IEnumerable<TransactionLog> newLogs,
-            CancellationToken ct)
+        private async Task PersistNewLogsAsync(TransactionLog newLogs, CancellationToken ct)
         {
-            var mergedLogs = TransactionLog.Coalesce(newLogs);
-            var templateItem = mergedLogs.AllItems.First();
+            var templateItem = newLogs.AllItems.First();
             var startTxId = templateItem.StartTxId;
             var stagingTableName = CreateStagingTableName(startTxId);
             var stagingTableItem = TransactionItem.CreateStagingTableItem(
@@ -527,7 +525,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 templateItem.EndTxId,
                 TransactionItemState.Initial,
                 stagingTableName);
-            var allItems = mergedLogs.AllItems.Append(stagingTableItem);
+            var allItems = newLogs.AllItems.Append(stagingTableItem);
 
             await _tableStatus.PersistNewItemsAsync(allItems, ct);
         }
