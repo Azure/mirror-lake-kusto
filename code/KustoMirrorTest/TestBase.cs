@@ -55,13 +55,15 @@ namespace KustoMirrorTest
 
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
 
+        private readonly static SparkSessionClient _sparkSessionClient;
         private readonly static Task<SparkSession> _sparkSessionTask;
-        private readonly ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
+        private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
             new ConcurrentQueue<TaskCompletionSource>();
 
         static TestBase()
         {
             ReadEnvironmentVariables();
+            _sparkSessionClient = CreateSparkSessionClient();
             _sparkSessionTask = AcquireSparkSessionAsync();
         }
 
@@ -120,7 +122,7 @@ namespace KustoMirrorTest
             //  3- When they are done, they dequeue themselves
             //  4- After dequeuing themselves, they unlock the next one
             //  2b- If they are actually at the top of the queue it means they are alone or are about to be unlocked
-            
+
             //  Step 1
             _sparkSessionQueue.Enqueue(waitingSource);
 
@@ -135,6 +137,9 @@ namespace KustoMirrorTest
                 }
                 //  Step 2
                 await waitingSource.Task;
+
+                //  Clean variables in the Spark session (cheap way to recycle sessions)
+                await CleanSparkSessionAsync(sparkSession);
 
                 return new Holding<SparkSession>(
                     sparkSession,
@@ -169,6 +174,26 @@ namespace KustoMirrorTest
             }
         }
 
+        private async Task CleanSparkSessionAsync(SparkSession sparkSession)
+        {
+            var sparkStatementRequest = new SparkStatementOptions
+            {
+                Kind = SparkStatementLanguageType.Spark,
+                Code = @"%reset -f"
+            };
+            var createStatementOperation = await _sparkSessionClient.StartCreateSparkStatementAsync(
+                sparkSession.Id,
+                sparkStatementRequest);
+            var statementCreated = await createStatementOperation.WaitForCompletionAsync();
+
+            if(statementCreated.Value.State != LivyStatementStates.Available)
+            {
+                throw new InvalidOperationException(
+                    "Spark session clean command returned in a bad state of "
+                    + $"'{statementCreated.Value.State}'");
+            }
+        }
+
         private static async Task<SparkSession> AcquireSparkSessionAsync()
         {
             var session = await RetrieveSparkSessionAsync();
@@ -200,10 +225,16 @@ namespace KustoMirrorTest
 
                     if (int.TryParse(content, out id))
                     {
-                        var client = CreateSparkSessionClient();
-                        var session = await client.GetSparkSessionAsync(id);
+                        var session = await _sparkSessionClient.GetSparkSessionAsync(id);
 
-                        return session.Value;
+                        if (session.Value.State == LivyStates.Dead)
+                        {
+                            return null;
+                        }
+                        else
+                        {
+                            return session.Value;
+                        }
                     }
                 }
                 catch
@@ -216,7 +247,6 @@ namespace KustoMirrorTest
 
         private static async Task<SparkSession> CreateSparkSessionAsync()
         {
-            var client = CreateSparkSessionClient();
             var request = new SparkSessionOptions(name: $"session-{Guid.NewGuid()}")
             {
                 DriverMemory = "28g",
@@ -225,7 +255,7 @@ namespace KustoMirrorTest
                 ExecutorCores = 4,
                 ExecutorCount = 2
             };
-            var createSessionOperation = await client.StartCreateSparkSessionAsync(request);
+            var createSessionOperation = await _sparkSessionClient.StartCreateSparkSessionAsync(request);
             var sessionCreated = await createSessionOperation.WaitForCompletionAsync();
             var session = sessionCreated.Value;
 
