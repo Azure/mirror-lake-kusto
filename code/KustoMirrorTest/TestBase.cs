@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Azure.Analytics.Synapse.Spark;
+using Azure.Analytics.Synapse.Spark.Models;
+using Azure.Identity;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -69,6 +72,42 @@ namespace KustoMirrorTest
                     Environment.SetEnvironmentVariable(variable.Key, variable.Value);
                 }
             }
+        }
+
+        protected async Task<SparkSession> CreateSparkSessionAsync()
+        {
+            var sparkPoolName = GetEnvironmentVariable("kustoMirrorSparkPoolName");
+            var endpoint = GetEnvironmentVariable("kustoMirrorSparkEndpoint");
+            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
+            var appId = GetEnvironmentVariable("kustoMirrorSpId");
+            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var credential = new ClientSecretCredential(tenantId, appId, appSecret);
+            var client = new SparkSessionClient(new Uri(endpoint), sparkPoolName, credential);
+            var request = new SparkSessionOptions(name: $"session-{Guid.NewGuid()}")
+            {
+                DriverMemory = "28g",
+                DriverCores = 4,
+                ExecutorMemory = "28g",
+                ExecutorCores = 4,
+                ExecutorCount = 2
+            };
+            var createSessionOperation = await client.StartCreateSparkSessionAsync(request);
+            var sessionCreated = await createSessionOperation.WaitForCompletionAsync();
+
+            return sessionCreated;
+        }
+
+        private static string GetEnvironmentVariable(string variableName)
+        {
+            var value = Environment.GetEnvironmentVariable(variableName);
+
+            if (value == null)
+            {
+                throw new InvalidOperationException(
+                    $"Environment variable '{variableName}' missing");
+            }
+
+            return value;
         }
     }
 }
