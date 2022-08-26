@@ -2,6 +2,7 @@
 using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Identity;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -16,7 +17,7 @@ namespace KustoMirrorTest
     /// Spark stuff based on 
     /// https://github.com/Azure/azure-sdk-for-net/blob/Azure.Analytics.Synapse.Spark_1.0.0-preview.8/sdk/synapse/Azure.Analytics.Synapse.Spark/samples/Sample2_ExecuteSparkStatementAsync.md
     /// </summary>
-    public abstract class TestBase
+    public abstract partial class TestBase
     {
         #region Inner Types
         private class MainSettings
@@ -55,6 +56,8 @@ namespace KustoMirrorTest
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
 
         private readonly static Task<SparkSession> _sparkSessionTask;
+        private readonly ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
+            new ConcurrentQueue<TaskCompletionSource>();
 
         static TestBase()
         {
@@ -106,9 +109,64 @@ namespace KustoMirrorTest
         #endregion
 
         #region Spark
-        protected async Task<SparkSession> GetSparkSessionAsync()
+        protected async Task<Holding<SparkSession>> GetSparkSessionAsync()
         {
-            return await _sparkSessionTask;
+            var sparkSession = await _sparkSessionTask;
+            var waitingSource = new TaskCompletionSource();
+
+            //  Algorithm for the queue:
+            //  1- Each requester enqueue their own source (as we do here)
+            //  2- Requester wait for their task to unlock
+            //  3- When they are done, they dequeue themselves
+            //  4- After dequeuing themselves, they unlock the next one
+            //  2b- If they are actually at the top of the queue it means they are alone or are about to be unlocked
+            
+            //  Step 1
+            _sparkSessionQueue.Enqueue(waitingSource);
+
+            TaskCompletionSource? currentTop;
+
+            if (_sparkSessionQueue.TryPeek(out currentTop))
+            {
+                if (currentTop.Task.Id == waitingSource.Task.Id)
+                {   //  Step 2b (requester on top of queue already)
+                    //  We unlock ourselves in case we are alone
+                    waitingSource.SetResult();
+                }
+                //  Step 2
+                await waitingSource.Task;
+
+                return new Holding<SparkSession>(
+                    sparkSession,
+                    async () =>
+                    {
+                        //  This isn't asynchronous
+                        await Task.CompletedTask;
+
+                        //  Step 3
+                        if (_sparkSessionQueue.TryDequeue(out currentTop))
+                        {
+                            if (currentTop.Task.Id == waitingSource.Task.Id)
+                            {
+                                if (_sparkSessionQueue.TryPeek(out currentTop))
+                                {   //  Step 4
+                                    currentTop.SetResult();
+                                }
+                                else
+                                {   //  No more requester in queue (that's fine)
+                                }
+                            }
+                            else
+                            {
+                                throw new InvalidOperationException("No more Spark requester?");
+                            }
+                        }
+                    });
+            }
+            else
+            {   //  Nobody in the queue, impossible since requester unqueue themselves
+                throw new InvalidOperationException("Spark Session queue empty");
+            }
         }
 
         private static async Task<SparkSession> AcquireSparkSessionAsync()

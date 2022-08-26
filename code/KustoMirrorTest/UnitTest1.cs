@@ -5,7 +5,9 @@ namespace KustoMirrorTest
         [Fact]
         public async Task Test1Async()
         {
-            var session = await GetSparkSessionAsync();
+            await using (var sessionHolding = await GetSparkSessionAsync())
+            {
+            }
         }
     }
 }
