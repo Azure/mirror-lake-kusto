@@ -20,6 +20,43 @@ namespace KustoMirrorTest
     public abstract partial class TestBase
     {
         #region Inner Types
+        protected class Holding<T> : IAsyncDisposable
+        {
+            private readonly Func<Task> _disposeAsyncFunc;
+
+            public Holding(T value, Func<Task> disposeAsyncFunc)
+            {
+                Value = value;
+                _disposeAsyncFunc = disposeAsyncFunc;
+            }
+
+            public T Value { get; }
+
+            async ValueTask IAsyncDisposable.DisposeAsync()
+            {
+                await _disposeAsyncFunc();
+            }
+        }
+
+        protected class SparkSessionHolder : Holding<SparkSession>
+        {
+            private readonly Func<string, Task<SparkStatementOutput>> _executeSparkFunc;
+
+            public SparkSessionHolder(
+                SparkSession sparkSession,
+                Func<Task> disposeAsyncFunc,
+                Func<string, Task<SparkStatementOutput>> executeSparkFunc)
+                : base(sparkSession, disposeAsyncFunc)
+            {
+                _executeSparkFunc = executeSparkFunc;
+            }
+
+            public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
+            {
+                return await _executeSparkFunc(code);
+            }
+        }
+
         private class MainSettings
         {
             public IDictionary<string, ProjectSetting>? Profiles { get; set; }
@@ -111,7 +148,7 @@ namespace KustoMirrorTest
         #endregion
 
         #region Spark
-        protected async Task<Holding<SparkSession>> GetSparkSessionAsync()
+        protected async Task<SparkSessionHolder> GetSparkSessionAsync()
         {
             var sparkSession = await _sparkSessionTask;
             var waitingSource = new TaskCompletionSource();
@@ -141,7 +178,7 @@ namespace KustoMirrorTest
                 //  Clean variables in the Spark session (cheap way to recycle sessions)
                 await CleanSparkSessionAsync(sparkSession);
 
-                return new Holding<SparkSession>(
+                return new SparkSessionHolder(
                     sparkSession,
                     async () =>
                     {
@@ -166,7 +203,8 @@ namespace KustoMirrorTest
                                 throw new InvalidOperationException("No more Spark requester?");
                             }
                         }
-                    });
+                    },
+                    async (code) => await ExecuteSparkCodeAsync(sparkSession, code));
             }
             else
             {   //  Nobody in the queue, impossible since requester unqueue themselves
@@ -174,24 +212,40 @@ namespace KustoMirrorTest
             }
         }
 
-        private async Task CleanSparkSessionAsync(SparkSession sparkSession)
+        private static async Task<SparkStatementOutput> ExecuteSparkCodeAsync(
+            SparkSession sparkSession,
+            string code)
         {
             var sparkStatementRequest = new SparkStatementOptions
             {
                 Kind = SparkStatementLanguageType.Spark,
-                Code = @"%reset -f"
+                Code = code
             };
             var createStatementOperation = await _sparkSessionClient.StartCreateSparkStatementAsync(
                 sparkSession.Id,
                 sparkStatementRequest);
             var statementCreated = await createStatementOperation.WaitForCompletionAsync();
 
-            if(statementCreated.Value.State != LivyStatementStates.Available)
+            if (statementCreated.Value.State != LivyStatementStates.Available)
             {
                 throw new InvalidOperationException(
-                    "Spark session clean command returned in a bad state of "
+                    "Spark session command returned in a bad state of "
                     + $"'{statementCreated.Value.State}'");
             }
+            if (statementCreated.Value.Output.ErrorValue != null)
+            {
+                throw new InvalidOperationException(
+                    "Spark session command returned an error name of"
+                    + $"'{statementCreated.Value.Output.ErrorName}'"
+                    + $"and an error value of '{statementCreated.Value.Output.ErrorValue}'");
+            }
+
+            return statementCreated.Value.Output;
+        }
+
+        private static async Task CleanSparkSessionAsync(SparkSession sparkSession)
+        {
+            await ExecuteSparkCodeAsync(sparkSession, "%reset -f");
         }
 
         private static async Task<SparkSession> AcquireSparkSessionAsync()

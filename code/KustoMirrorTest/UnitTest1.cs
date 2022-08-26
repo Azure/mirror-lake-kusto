@@ -7,6 +7,7 @@ namespace KustoMirrorTest
         {
             await using (var sessionHolding = await GetSparkSessionAsync())
             {
+                var output = await sessionHolding.ExecuteSparkCodeAsync(@"print(""hi"")");
             }
         }
     }
