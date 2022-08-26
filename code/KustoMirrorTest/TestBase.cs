@@ -3,13 +3,19 @@ using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Identity;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Xunit.Sdk;
 
 namespace KustoMirrorTest
 {
+    /// <summary>
+    /// Spark stuff based on 
+    /// https://github.com/Azure/azure-sdk-for-net/blob/Azure.Analytics.Synapse.Spark_1.0.0-preview.8/sdk/synapse/Azure.Analytics.Synapse.Spark/samples/Sample2_ExecuteSparkStatementAsync.md
+    /// </summary>
     public abstract class TestBase
     {
         #region Inner Types
@@ -46,7 +52,18 @@ namespace KustoMirrorTest
         }
         #endregion
 
+        private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
+
+        private readonly static Task<SparkSession> _sparkSessionTask;
+
         static TestBase()
+        {
+            ReadEnvironmentVariables();
+            _sparkSessionTask = AcquireSparkSessionAsync();
+        }
+
+        #region Environment variables
+        private static void ReadEnvironmentVariables()
         {
             const string PATH = "Properties\\launchSettings.json";
 
@@ -74,29 +91,6 @@ namespace KustoMirrorTest
             }
         }
 
-        protected async Task<SparkSession> CreateSparkSessionAsync()
-        {
-            var sparkPoolName = GetEnvironmentVariable("kustoMirrorSparkPoolName");
-            var endpoint = GetEnvironmentVariable("kustoMirrorSparkEndpoint");
-            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
-            var appId = GetEnvironmentVariable("kustoMirrorSpId");
-            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
-            var credential = new ClientSecretCredential(tenantId, appId, appSecret);
-            var client = new SparkSessionClient(new Uri(endpoint), sparkPoolName, credential);
-            var request = new SparkSessionOptions(name: $"session-{Guid.NewGuid()}")
-            {
-                DriverMemory = "28g",
-                DriverCores = 4,
-                ExecutorMemory = "28g",
-                ExecutorCores = 4,
-                ExecutorCount = 2
-            };
-            var createSessionOperation = await client.StartCreateSparkSessionAsync(request);
-            var sessionCreated = await createSessionOperation.WaitForCompletionAsync();
-
-            return sessionCreated;
-        }
-
         private static string GetEnvironmentVariable(string variableName)
         {
             var value = Environment.GetEnvironmentVariable(variableName);
@@ -109,5 +103,89 @@ namespace KustoMirrorTest
 
             return value;
         }
+        #endregion
+
+        #region Spark
+        protected async Task<SparkSession> GetSparkSessionAsync()
+        {
+            return await _sparkSessionTask;
+        }
+
+        private static async Task<SparkSession> AcquireSparkSessionAsync()
+        {
+            var session = await RetrieveSparkSessionAsync();
+
+            if (session == null)
+            {
+                session = await CreateSparkSessionAsync();
+                await PersistSessionSparkAsync(session);
+            }
+
+            return session;
+        }
+
+        private static async Task PersistSessionSparkAsync(SparkSession session)
+        {
+            var content = session.Id.ToString();
+
+            await File.WriteAllTextAsync(SPARK_SESSION_ID_PATH, content);
+        }
+
+        private static async Task<SparkSession?> RetrieveSparkSessionAsync()
+        {
+            if (File.Exists(SPARK_SESSION_ID_PATH))
+            {
+                try
+                {
+                    var content = await File.ReadAllTextAsync(SPARK_SESSION_ID_PATH);
+                    int id;
+
+                    if (int.TryParse(content, out id))
+                    {
+                        var client = CreateSparkSessionClient();
+                        var session = await client.GetSparkSessionAsync(id);
+
+                        return session.Value;
+                    }
+                }
+                catch
+                {   //  Can't retrieve spark session id or session
+                }
+            }
+
+            return null;
+        }
+
+        private static async Task<SparkSession> CreateSparkSessionAsync()
+        {
+            var client = CreateSparkSessionClient();
+            var request = new SparkSessionOptions(name: $"session-{Guid.NewGuid()}")
+            {
+                DriverMemory = "28g",
+                DriverCores = 4,
+                ExecutorMemory = "28g",
+                ExecutorCores = 4,
+                ExecutorCount = 2
+            };
+            var createSessionOperation = await client.StartCreateSparkSessionAsync(request);
+            var sessionCreated = await createSessionOperation.WaitForCompletionAsync();
+            var session = sessionCreated.Value;
+
+            return session;
+        }
+
+        private static SparkSessionClient CreateSparkSessionClient()
+        {
+            var sparkPoolName = GetEnvironmentVariable("kustoMirrorSparkPoolName");
+            var endpoint = GetEnvironmentVariable("kustoMirrorSparkEndpoint");
+            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
+            var appId = GetEnvironmentVariable("kustoMirrorSpId");
+            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var credential = new ClientSecretCredential(tenantId, appId, appSecret);
+            var client = new SparkSessionClient(new Uri(endpoint), sparkPoolName, credential);
+
+            return client;
+        }
+        #endregion
     }
 }
