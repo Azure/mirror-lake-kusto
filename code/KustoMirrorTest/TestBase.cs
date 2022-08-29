@@ -26,21 +26,42 @@ namespace KustoMirrorTest
             private readonly SparkSession _sparkSession;
             private readonly Func<Task> _disposeSparkSessionAsyncFunc;
             private readonly Func<string, Task<SparkStatementOutput>> _executeSparkFunc;
+            private readonly Func<string, string> _getResourceFunc;
+            private readonly string _testSetId;
 
             public SessionHolder(
+                string testSetId,
+                int testId,
                 SparkSession sparkSession,
                 Func<Task> disposeSparkSessionAsyncFunc,
-                Func<string, Task<SparkStatementOutput>> executeSparkFunc)
+                Func<string, Task<SparkStatementOutput>> executeSparkFunc,
+                Func<string, string> getResourceFunc)
             {
+                _testSetId = testSetId;
+                TestId = testId;
                 _sparkSession = sparkSession;
                 _disposeSparkSessionAsyncFunc = disposeSparkSessionAsyncFunc;
                 _executeSparkFunc = executeSparkFunc;
+                _getResourceFunc = getResourceFunc;
             }
+
+            public int TestId { get; }
+
+            public string SynapseRootFolder => $"/tests/{_testSetId}/{TestId}";
 
             public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
             {
                 return await _executeSparkFunc(code);
             }
+
+            public string GetResource(string resourceName)
+            {
+                var rawScript = _getResourceFunc(resourceName);
+                var script = rawScript.Replace("<ROOT>", SynapseRootFolder);
+
+                return script;
+            }
+
             async ValueTask IAsyncDisposable.DisposeAsync()
             {
                 await _disposeSparkSessionAsyncFunc();
@@ -86,6 +107,8 @@ namespace KustoMirrorTest
         private readonly static Task<SparkSession> _sparkSessionTask;
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
             new ConcurrentQueue<TaskCompletionSource>();
+        private readonly static string _testSetId = Guid.NewGuid().ToString("N");
+        private static volatile int _testId = 0;
 
         static TestBase()
         {
@@ -169,6 +192,8 @@ namespace KustoMirrorTest
                 //await CleanSparkSessionAsync(sparkSession);
 
                 return new SessionHolder(
+                    _testSetId,
+                    Interlocked.Increment(ref _testId),
                     sparkSession,
                     async () =>
                     {
@@ -194,7 +219,8 @@ namespace KustoMirrorTest
                             }
                         }
                     },
-                    async (code) => await ExecuteSparkCodeAsync(sparkSession, code));
+                    async (code) => await ExecuteSparkCodeAsync(sparkSession, code),
+                    GetResource);
             }
             else
             {   //  Nobody in the queue, impossible since requester unqueue themselves
@@ -208,7 +234,7 @@ namespace KustoMirrorTest
         {
             var sparkStatementRequest = new SparkStatementOptions
             {
-                Kind = SparkStatementLanguageType.Spark,
+                Kind = SparkStatementLanguageType.PySpark,
                 Code = code
             };
             var createStatementOperation = await _sparkSessionClient.StartCreateSparkStatementAsync(
@@ -320,8 +346,8 @@ namespace KustoMirrorTest
         }
         #endregion
 
-        #region Storage
-        protected string GetResource(string resourceName)
+        #region Resource
+        private string GetResource(string resourceName)
         {
             var assembly = this.GetType().GetTypeInfo().Assembly;
             var typeNamespace = this.GetType().Namespace;

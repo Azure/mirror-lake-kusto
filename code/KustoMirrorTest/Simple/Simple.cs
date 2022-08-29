@@ -5,10 +5,10 @@ namespace KustoMirrorTest.Simple
         [Fact]
         public async Task OneLineOneColumn()
         {
-            await using (var sessionHolding = await GetSparkSessionAsync())
+            await using (var session = await GetSparkSessionAsync())
             {
-                var script = GetResource("OneLineOneColumn.py");
-                var output = await sessionHolding.ExecuteSparkCodeAsync(@"print(""hi"")");
+                var script = session.GetResource("OneLineOneColumn.py");
+                var output = await session.ExecuteSparkCodeAsync(script);
             }
         }
     }
