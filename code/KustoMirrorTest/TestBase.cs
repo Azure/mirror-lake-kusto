@@ -1,5 +1,6 @@
 ﻿using Azure.Analytics.Synapse.Spark;
 using Azure.Analytics.Synapse.Spark.Models;
+using Azure.Core;
 using Azure.Identity;
 using System;
 using System.Collections.Concurrent;
@@ -158,6 +159,21 @@ namespace KustoMirrorTest
 
             return value;
         }
+        #endregion
+
+        #region Azure
+        private static TokenCredential CreateAzureCredentials()
+        {
+            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
+            var appId = GetEnvironmentVariable("kustoMirrorSpId");
+            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var credential = new ClientSecretCredential(tenantId, appId, appSecret);
+
+            return credential;
+        }
+        #endregion
+
+        #region ARM
         #endregion
 
         #region Spark
@@ -336,17 +352,14 @@ namespace KustoMirrorTest
         {
             var sparkPoolName = GetEnvironmentVariable("kustoMirrorSparkPoolName");
             var endpoint = GetEnvironmentVariable("kustoMirrorSparkEndpoint");
-            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
-            var appId = GetEnvironmentVariable("kustoMirrorSpId");
-            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
-            var credential = new ClientSecretCredential(tenantId, appId, appSecret);
+            var credential = CreateAzureCredentials();
             var client = new SparkSessionClient(new Uri(endpoint), sparkPoolName, credential);
 
             return client;
         }
         #endregion
 
-        #region Resource
+        #region Embedded Resource
         private string GetResource(string resourceName)
         {
             var assembly = this.GetType().GetTypeInfo().Assembly;
