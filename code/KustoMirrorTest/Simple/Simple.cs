@@ -1,12 +1,13 @@
-namespace KustoMirrorTest
+namespace KustoMirrorTest.Simple
 {
-    public class UnitTest1 : TestBase
+    public class Simple : TestBase
     {
         [Fact]
-        public async Task Test1Async()
+        public async Task OneLineOneColumn()
         {
             await using (var sessionHolding = await GetSparkSessionAsync())
             {
+                var script = GetResource("OneLineOneColumn.py");
                 var output = await sessionHolding.ExecuteSparkCodeAsync(@"print(""hi"")");
             }
         }

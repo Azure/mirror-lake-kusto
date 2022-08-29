@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -176,7 +177,7 @@ namespace KustoMirrorTest
                 await waitingSource.Task;
 
                 //  Clean variables in the Spark session (cheap way to recycle sessions)
-                await CleanSparkSessionAsync(sparkSession);
+                //await CleanSparkSessionAsync(sparkSession);
 
                 return new SparkSessionHolder(
                     sparkSession,
@@ -327,6 +328,31 @@ namespace KustoMirrorTest
             var client = new SparkSessionClient(new Uri(endpoint), sparkPoolName, credential);
 
             return client;
+        }
+        #endregion
+
+        #region Storage
+        protected string GetResource(string resourceName)
+        {
+            var assembly = this.GetType().GetTypeInfo().Assembly;
+            var typeNamespace = this.GetType().Namespace;
+            var fullResourceName = $"{typeNamespace}.Scripts.{resourceName}";
+
+            using (var stream = assembly.GetManifestResourceStream(fullResourceName))
+            {
+                if (stream == null)
+                {
+                    throw new ArgumentException(
+                        $"Can't find resource file '{resourceName}'",
+                        nameof(resourceName));
+                }
+                using (var reader = new StreamReader(stream))
+                {
+                    var text = reader.ReadToEnd();
+
+                    return text;
+                }
+            }
         }
         #endregion
     }

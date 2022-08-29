@@ -17,6 +17,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Simple\Scripts\OneLineOneColumn.py" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Simple\Scripts\OneLineOneColumn.py" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Azure.Analytics.Synapse.Spark" Version="1.0.0-preview.8" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.2.0" />
     <PackageReference Include="xunit" Version="2.4.1" />
