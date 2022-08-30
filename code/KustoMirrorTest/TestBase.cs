@@ -2,6 +2,8 @@
 using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Core;
 using Azure.Identity;
+using Azure.ResourceManager;
+using Microsoft.Azure.Management.Kusto;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -63,10 +65,19 @@ namespace KustoMirrorTest
                 return script;
             }
 
+            public Task<DbHolder> CreateDbAsync()
+            {
+                throw new NotImplementedException();
+            }
+
             async ValueTask IAsyncDisposable.DisposeAsync()
             {
                 await _disposeSparkSessionAsyncFunc();
             }
+        }
+
+        protected class DbHolder
+        {
         }
 
         private class MainSettings
@@ -105,6 +116,7 @@ namespace KustoMirrorTest
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
 
         private readonly static SparkSessionClient _sparkSessionClient;
+        private readonly static KustoManagementClient _kustoManagementClient;
         private readonly static Task<SparkSession> _sparkSessionTask;
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
             new ConcurrentQueue<TaskCompletionSource>();
@@ -115,6 +127,7 @@ namespace KustoMirrorTest
         {
             ReadEnvironmentVariables();
             _sparkSessionClient = CreateSparkSessionClient();
+            _kustoManagementClient = CreateKustoManagementClient();
             _sparkSessionTask = AcquireSparkSessionAsync();
         }
 
@@ -381,6 +394,19 @@ namespace KustoMirrorTest
                     return text;
                 }
             }
+        }
+        #endregion
+
+        #region Kusto
+        private static KustoManagementClient CreateKustoManagementClient()
+        {
+            throw new NotImplementedException();
+            //Microsoft.Azure.Management.Kusto.IKustoManagementClient
+            //var q = new ArmClient(CreateAzureCredentials());
+
+            //q.GetDefaultSubscription().GetResourceGroup("").
+
+            //return new KustoManagementClient();
         }
         #endregion
     }
