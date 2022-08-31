@@ -2,11 +2,14 @@
 using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Core;
 using Azure.Identity;
-using Azure.ResourceManager;
 using Microsoft.Azure.Management.Kusto;
+using Microsoft.Azure.Management.Kusto.Models;
+using Microsoft.IdentityModel.Clients.ActiveDirectory;
+using Microsoft.Rest;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -50,7 +53,7 @@ namespace KustoMirrorTest
 
             public int TestId { get; }
 
-            public string SynapseRootFolder => $"/tests/{_testSetId}/{TestId}";
+            public string SynapseRootFolder => $"/automated-tests/{_testSetId}/{TestId}";
 
             public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
             {
@@ -65,19 +68,52 @@ namespace KustoMirrorTest
                 return script;
             }
 
-            public Task<DbHolder> CreateDbAsync()
-            {
-                throw new NotImplementedException();
-            }
-
             async ValueTask IAsyncDisposable.DisposeAsync()
             {
                 await _disposeSparkSessionAsyncFunc();
             }
         }
 
-        protected class DbHolder
+        protected class DbHolder : IAsyncDisposable
         {
+            private readonly Func<Task> _deleteDbFunc;
+
+            public DbHolder(string dbName, Func<Task> deleteDbFunc)
+            {
+                DbName = dbName;
+                _deleteDbFunc = deleteDbFunc;
+            }
+
+            public string DbName { get; }
+
+            async ValueTask IAsyncDisposable.DisposeAsync()
+            {
+                await _deleteDbFunc();
+            }
+        }
+
+        private class DbManagement
+        {
+            private readonly Func<Task<string>> _createDbFunc;
+            private readonly Func<string, Task> _deleteDbFunc;
+
+            public DbManagement(
+                Func<Task<string>> createDbFunc,
+                Func<string, Task> deleteDbFunc)
+            {
+                _createDbFunc = createDbFunc;
+                _deleteDbFunc = deleteDbFunc;
+            }
+
+            public async Task<DbHolder> GetNewDbAsync()
+            {
+                var dbName = await _createDbFunc();
+                var dbHolder = new DbHolder(
+                    dbName,
+                    async () => await _deleteDbFunc(dbName));
+
+                return dbHolder;
+            }
         }
 
         private class MainSettings
@@ -116,18 +152,19 @@ namespace KustoMirrorTest
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
 
         private readonly static SparkSessionClient _sparkSessionClient;
-        private readonly static KustoManagementClient _kustoManagementClient;
         private readonly static Task<SparkSession> _sparkSessionTask;
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
             new ConcurrentQueue<TaskCompletionSource>();
+        private readonly static Task<DbManagement> _dbManagementTask;
         private readonly static string _testSetId = Guid.NewGuid().ToString("N");
         private static volatile int _testId = 0;
+        private static volatile int _dbId = 0;
 
         static TestBase()
         {
             ReadEnvironmentVariables();
             _sparkSessionClient = CreateSparkSessionClient();
-            _kustoManagementClient = CreateKustoManagementClient();
+            _dbManagementTask = CreateDbManagementAsync();
             _sparkSessionTask = AcquireSparkSessionAsync();
         }
 
@@ -175,7 +212,7 @@ namespace KustoMirrorTest
         #endregion
 
         #region Azure
-        private static TokenCredential CreateAzureCredentials()
+        private static ClientSecretCredential CreateAzureCredentials()
         {
             var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
             var appId = GetEnvironmentVariable("kustoMirrorSpId");
@@ -398,15 +435,59 @@ namespace KustoMirrorTest
         #endregion
 
         #region Kusto
-        private static KustoManagementClient CreateKustoManagementClient()
+        private static async Task<DbManagement> CreateDbManagementAsync()
         {
-            throw new NotImplementedException();
-            //Microsoft.Azure.Management.Kusto.IKustoManagementClient
-            //var q = new ArmClient(CreateAzureCredentials());
+            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
+            var appId = GetEnvironmentVariable("kustoMirrorSpId");
+            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var subscriptionId = GetEnvironmentVariable("kustoMirrorSubscriptionId");
+            var resourceGroup = GetEnvironmentVariable("kustoMirrorResourceGroup");
+            var clusterName = GetEnvironmentVariable("kustoMirrorCluster");
+            var dbPrefix = GetEnvironmentVariable("kustoMirrorDbPrefix");
+            var credential = new ClientCredential(appId, appSecret);
+            var authenticationContext = new AuthenticationContext($"https://login.windows.net/{tenantId}");
+            var result = await authenticationContext.AcquireTokenAsync(
+                "https://management.core.windows.net/",
+                credential);
+            var tokenCredentials = new TokenCredentials(result.AccessToken, result.AccessTokenType);
+            var kustoManagementClient = new KustoManagementClient(tokenCredentials)
+            {
+                SubscriptionId = subscriptionId
+            };
+            var databases = kustoManagementClient.Databases;
+            var dbList = await databases.ListByClusterAsync(resourceGroup, clusterName);
+            var dbsDeletionTasks = dbList
+                .Where(db => db.Name.StartsWith(dbPrefix))
+                .Select(db => databases.DeleteAsync(resourceGroup, clusterName, db.Name))
+                .ToImmutableArray();
+            var clusterTask = kustoManagementClient.Clusters.GetAsync(resourceGroup, clusterName);
+            var cluster = await clusterTask;
 
-            //q.GetDefaultSubscription().GetResourceGroup("").
+            await Task.WhenAll(dbsDeletionTasks);
 
-            //return new KustoManagementClient();
+            var dbManagement = new DbManagement(
+                async () =>
+                {
+                    var dbName = $"{dbPrefix}_{Interlocked.Increment(ref _dbId)}";
+                    var db = new ReadWriteDatabase
+                    {
+                        Location = cluster.Location
+                    };
+
+                    await databases.CreateOrUpdateAsync(resourceGroup, clusterName, dbName, db);
+
+                    return dbName;
+                },
+                async (dbName) => await databases.DeleteAsync(resourceGroup, clusterName, dbName));
+
+            return dbManagement;
+        }
+
+        protected async Task<DbHolder> GetNewDbAsync()
+        {
+            var dbManagement = await _dbManagementTask;
+
+            return await dbManagement.GetNewDbAsync();
         }
         #endregion
     }
