@@ -29,26 +29,23 @@ namespace KustoMirrorTest
         #region Inner Types
         protected class SessionHolder : IAsyncDisposable
         {
-            private readonly SparkSession _sparkSession;
-            private readonly Func<Task> _disposeSparkSessionAsyncFunc;
-            private readonly Func<string, Task<SparkStatementOutput>> _executeSparkFunc;
-            private readonly Func<string, string> _getResourceFunc;
             private readonly string _testSetId;
+            private readonly Func<string, string> _getResourceFunc;
+            private readonly SparkSessionHolder _sparkSessionHolder;
+            private readonly DbHolder _dbHolder;
 
             public SessionHolder(
                 string testSetId,
                 int testId,
-                SparkSession sparkSession,
-                Func<Task> disposeSparkSessionAsyncFunc,
-                Func<string, Task<SparkStatementOutput>> executeSparkFunc,
+                SparkSessionHolder sparkSessionHolder,
+                DbHolder dbHolder,
                 Func<string, string> getResourceFunc)
             {
                 _testSetId = testSetId;
                 TestId = testId;
-                _sparkSession = sparkSession;
-                _disposeSparkSessionAsyncFunc = disposeSparkSessionAsyncFunc;
-                _executeSparkFunc = executeSparkFunc;
                 _getResourceFunc = getResourceFunc;
+                _sparkSessionHolder = sparkSessionHolder;
+                _dbHolder = dbHolder;
             }
 
             public int TestId { get; }
@@ -57,7 +54,7 @@ namespace KustoMirrorTest
 
             public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
             {
-                return await _executeSparkFunc(code);
+                return await _sparkSessionHolder.ExecuteSparkCodeAsync(code);
             }
 
             public string GetResource(string resourceName)
@@ -66,6 +63,33 @@ namespace KustoMirrorTest
                 var script = rawScript.Replace("<ROOT>", SynapseRootFolder);
 
                 return script;
+            }
+
+            async ValueTask IAsyncDisposable.DisposeAsync()
+            {
+                await (_sparkSessionHolder as IAsyncDisposable).DisposeAsync();
+            }
+        }
+
+        protected class SparkSessionHolder : IAsyncDisposable
+        {
+            private readonly SparkSession _sparkSession;
+            private readonly Func<Task> _disposeSparkSessionAsyncFunc;
+            private readonly Func<string, Task<SparkStatementOutput>> _executeSparkFunc;
+
+            public SparkSessionHolder(
+                SparkSession sparkSession,
+                Func<Task> disposeSparkSessionAsyncFunc,
+                Func<string, Task<SparkStatementOutput>> executeSparkFunc)
+            {
+                _sparkSession = sparkSession;
+                _disposeSparkSessionAsyncFunc = disposeSparkSessionAsyncFunc;
+                _executeSparkFunc = executeSparkFunc;
+            }
+
+            public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
+            {
+                return await _executeSparkFunc(code);
             }
 
             async ValueTask IAsyncDisposable.DisposeAsync()
@@ -224,11 +248,24 @@ namespace KustoMirrorTest
         }
         #endregion
 
-        #region ARM
+        #region Session
+        protected async Task<SessionHolder> GetTestSessionAsync()
+        {
+            var sparkSessionTask = GetSparkSessionAsync();
+            var db = await GetNewDbAsync();
+            var sparkSession = await sparkSessionTask;
+
+            return new SessionHolder(
+                _testSetId,
+                Interlocked.Increment(ref _testId),
+                sparkSession,
+                db,
+                GetResource);
+        }
         #endregion
 
         #region Spark
-        protected async Task<SessionHolder> GetSparkSessionAsync()
+        private async Task<SparkSessionHolder> GetSparkSessionAsync()
         {
             var sparkSession = await _sparkSessionTask;
             var waitingSource = new TaskCompletionSource();
@@ -258,9 +295,7 @@ namespace KustoMirrorTest
                 //  Clean variables in the Spark session (cheap way to recycle sessions)
                 //await CleanSparkSessionAsync(sparkSession);
 
-                return new SessionHolder(
-                    _testSetId,
-                    Interlocked.Increment(ref _testId),
+                return new SparkSessionHolder(
                     sparkSession,
                     async () =>
                     {
@@ -286,8 +321,7 @@ namespace KustoMirrorTest
                             }
                         }
                     },
-                    async (code) => await ExecuteSparkCodeAsync(sparkSession, code),
-                    GetResource);
+                    async (code) => await ExecuteSparkCodeAsync(sparkSession, code));
             }
             else
             {   //  Nobody in the queue, impossible since requester unqueue themselves
