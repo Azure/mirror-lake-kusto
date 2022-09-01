@@ -157,7 +157,7 @@ namespace KustoMirrorTest
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
             new ConcurrentQueue<TaskCompletionSource>();
         private readonly static Task<DbManagement> _dbManagementTask;
-        private readonly static string _testSetId = Guid.NewGuid().ToString("N");
+        private readonly static string _testSetId = DateTime.Now.ToString("yyyy-MM-dd--HH-mm-ss");
         private static volatile int _testId = 0;
         private static volatile int _dbId = 0;
 
