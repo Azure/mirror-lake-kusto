@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace Kusto.Mirror.ConsoleApp
 {
-    internal class Program
+    public class Program
     {
         #region Inner Types
         private class MultiFilter : TraceFilter
@@ -72,7 +72,7 @@ namespace Kusto.Mirror.ConsoleApp
             }
         }
 
-        internal static async Task<int> Main(string[] args)
+        public static async Task<int> Main(string[] args)
         {
             var sessionId = Guid.NewGuid().ToString();
 

@@ -3,6 +3,7 @@ using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Core;
 using Azure.Identity;
 using Kusto.Data.Linq;
+using Kusto.Mirror.ConsoleApp;
 using Microsoft.Azure.Management.Kusto;
 using Microsoft.Azure.Management.Kusto.Models;
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
@@ -193,6 +194,8 @@ namespace KustoMirrorTest
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
         private const int CREATE_DB_AHEAD_COUNT = 5;
 
+        private readonly static string? _singleExecPath;
+        private readonly static Uri _ingestionUri;
         private readonly static SparkSessionClient _sparkSessionClient;
         private readonly static Task<SparkSession> _sparkSessionTask;
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
@@ -207,7 +210,9 @@ namespace KustoMirrorTest
             var now = DateTime.Now;
 
             ReadEnvironmentVariables();
-            _testSetId = $"{now.ToString("yyyy-MM-dd")}/{now.ToString("HH-mm-ss")}";
+            _singleExecPath = Environment.GetEnvironmentVariable("kustoMirrorSingleExecPath");
+            _ingestionUri = new Uri(GetEnvironmentVariable("kustoMirrorIngestionUri"));
+            _testSetId = $"{now.ToString("yyyy-MM-dd")}/{now.ToString("HH:mm:ss")}";
             _sparkSessionClient = CreateSparkSessionClient();
             _dbManagementTask = CreateDbManagementAsync();
             _sparkSessionTask = AcquireSparkSessionAsync();
@@ -284,13 +289,34 @@ namespace KustoMirrorTest
                 db);
         }
 
-        private Task RunMirrorAsync(
+        private async Task RunMirrorAsync(
             string checkpointBlobUrl,
             string deltaTableStorageUrl,
             string database,
             string kustoTable)
         {
-            throw new NotImplementedException();
+            var args = new[]
+            {
+                "-s",
+                deltaTableStorageUrl,
+                "-c",
+                checkpointBlobUrl,
+                "-i",
+                _ingestionUri.ToString(),
+                "-d",
+                database,
+                "-t",
+                kustoTable
+            };
+
+            if (string.IsNullOrEmpty(_singleExecPath))
+            {
+                await Program.Main(args);
+            }
+            else
+            {
+                throw new NotImplementedException("Out-of-proc");
+            }
         }
         #endregion
 
