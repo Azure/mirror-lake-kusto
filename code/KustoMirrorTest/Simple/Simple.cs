@@ -10,7 +10,7 @@ namespace KustoMirrorTest.Simple
                 var script = session.GetResource("OneLineOneColumn.py");
                 var output = await session.ExecuteSparkCodeAsync(script);
 
-                //await RunMirrorAsync(session, db, "delta", "OneLineTable");
+                await session.RunMirrorAsync("delta", "OneLine");
             }
         }
     }

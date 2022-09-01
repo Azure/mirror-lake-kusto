@@ -2,6 +2,7 @@
 using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Core;
 using Azure.Identity;
+using Kusto.Data.Linq;
 using Microsoft.Azure.Management.Kusto;
 using Microsoft.Azure.Management.Kusto.Models;
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
@@ -31,20 +32,23 @@ namespace KustoMirrorTest
         {
             private readonly string _testSetId;
             private readonly Func<string, string> _getResourceFunc;
+            private readonly Func<string, string, string, string, Task> _runMirrorAsync;
             private readonly SparkSessionHolder _sparkSessionHolder;
             private readonly DbHolder _dbHolder;
 
             public SessionHolder(
                 string testSetId,
                 int testId,
+                Func<string, string> getResourceFunc,
+                Func<string, string, string, string, Task> runMirrorAsync,
                 SparkSessionHolder sparkSessionHolder,
-                DbHolder dbHolder,
-                Func<string, string> getResourceFunc)
+                DbHolder dbHolder)
             {
                 _testSetId = testSetId;
                 TestId = testId;
                 _getResourceFunc = getResourceFunc;
                 _sparkSessionHolder = sparkSessionHolder;
+                _runMirrorAsync = runMirrorAsync;
                 _dbHolder = dbHolder;
             }
 
@@ -63,6 +67,19 @@ namespace KustoMirrorTest
                 var script = rawScript.Replace("<ROOT>", SynapseRootFolder);
 
                 return script;
+            }
+
+            public async Task RunMirrorAsync(string deltaTableFolder, string kustoTable)
+            {
+                var containerUrl = GetEnvironmentVariable("kustoMirrorContainerUrl");
+                var checkpointBlobUrl = $"{containerUrl}/{SynapseRootFolder}/checkpoint.csv";
+                var deltaTableStorageUrl = $"{containerUrl}/{SynapseRootFolder}/{deltaTableFolder}";
+
+                await _runMirrorAsync(
+                    checkpointBlobUrl,
+                    deltaTableStorageUrl,
+                    _dbHolder.DbName,
+                    kustoTable);
             }
 
             async ValueTask IAsyncDisposable.DisposeAsync()
@@ -181,13 +198,16 @@ namespace KustoMirrorTest
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
             new ConcurrentQueue<TaskCompletionSource>();
         private readonly static Task<DbManagement> _dbManagementTask;
-        private readonly static string _testSetId = DateTime.Now.ToString("yyyy-MM-dd--HH-mm-ss");
+        private readonly static string _testSetId;
         private static volatile int _testId = 0;
         private static volatile int _dbId = 0;
 
         static TestBase()
         {
+            var now = DateTime.Now;
+
             ReadEnvironmentVariables();
+            _testSetId = $"{now.ToString("yyyy-MM-dd")}/{now.ToString("HH-mm-ss")}";
             _sparkSessionClient = CreateSparkSessionClient();
             _dbManagementTask = CreateDbManagementAsync();
             _sparkSessionTask = AcquireSparkSessionAsync();
@@ -258,9 +278,19 @@ namespace KustoMirrorTest
             return new SessionHolder(
                 _testSetId,
                 Interlocked.Increment(ref _testId),
+                GetResource,
+                RunMirrorAsync,
                 sparkSession,
-                db,
-                GetResource);
+                db);
+        }
+
+        private Task RunMirrorAsync(
+            string checkpointBlobUrl,
+            string deltaTableStorageUrl,
+            string database,
+            string kustoTable)
+        {
+            throw new NotImplementedException();
         }
         #endregion
 
