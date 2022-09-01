@@ -150,6 +150,7 @@ namespace KustoMirrorTest
         #endregion
 
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
+        private const int CREATE_DB_AHEAD_COUNT = 5;
 
         private readonly static SparkSessionClient _sparkSessionClient;
         private readonly static Task<SparkSession> _sparkSessionTask;
@@ -457,26 +458,45 @@ namespace KustoMirrorTest
             var databases = kustoManagementClient.Databases;
             var dbList = await databases.ListByClusterAsync(resourceGroup, clusterName);
             var dbsDeletionTasks = dbList
-                .Where(db => db.Name.StartsWith(dbPrefix))
-                .Select(db => databases.DeleteAsync(resourceGroup, clusterName, db.Name))
+                .Select(db => db.Name.Split('/').Last())
+                .Where(dbName => dbName.StartsWith(dbPrefix))
+                .Select(dbName => databases.DeleteAsync(resourceGroup, clusterName, dbName))
                 .ToImmutableArray();
             var clusterTask = kustoManagementClient.Clusters.GetAsync(resourceGroup, clusterName);
             var cluster = await clusterTask;
+            var dbCreationTaskQueue = new ConcurrentQueue<Task<string>>();
 
             await Task.WhenAll(dbsDeletionTasks);
 
             var dbManagement = new DbManagement(
                 async () =>
                 {
-                    var dbName = $"{dbPrefix}_{Interlocked.Increment(ref _dbId)}";
-                    var db = new ReadWriteDatabase
+                    Func<Task<string>> dbCreationFunc = async () =>
                     {
-                        Location = cluster.Location
+                        var dbName = $"{dbPrefix}_{Interlocked.Increment(ref _dbId)}";
+                        var db = new ReadWriteDatabase
+                        {
+                            Location = cluster.Location
+                        };
+
+                        await databases.CreateOrUpdateAsync(resourceGroup, clusterName, dbName, db);
+
+                        return dbName;
                     };
+                    Task<string>? dbCreationTask;
 
-                    await databases.CreateOrUpdateAsync(resourceGroup, clusterName, dbName, db);
+                    dbCreationTaskQueue.TryDequeue(out dbCreationTask);
+                    if (dbCreationTask == null)
+                    {
+                        dbCreationTask = dbCreationFunc();
+                    }
+                    //  Fill ahead for better performance of later calls
+                    while (dbCreationTaskQueue.Count < CREATE_DB_AHEAD_COUNT)
+                    {
+                        dbCreationTaskQueue.Enqueue(dbCreationFunc());
+                    }
 
-                    return dbName;
+                    return await dbCreationTask;
                 },
                 async (dbName) => await databases.DeleteAsync(resourceGroup, clusterName, dbName));
 
