@@ -53,7 +53,7 @@ namespace KustoMirrorTest
 
             public int TestId { get; }
 
-            public string SynapseRootFolder => $"/automated-tests/{_testSetId}/{TestId}";
+            public string SynapseRootFolder => $"/automated-tests/{_testSetId}/{TestId.ToString("D4")}";
 
             public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
             {
