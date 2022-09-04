@@ -23,34 +23,32 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
 
         #region Constructors
         public static async Task<KustoClusterGateway> CreateAsync(
-            AuthenticationMode authenticationMode,
-            Uri clusterIngestionUri,
+            string clusterIngestionConnectionString,
             string version,
             string? requestDescription = null)
         {
-            var clusterQueryUri = await GetQueryUriAsync(authenticationMode, clusterIngestionUri);
+            var clusterQueryUri = await GetQueryUriAsync(clusterIngestionConnectionString);
 
             return new KustoClusterGateway(
-                authenticationMode,
+                clusterIngestionConnectionString,
                 clusterQueryUri,
-                clusterIngestionUri,
                 version,
                 requestDescription);
         }
 
         private KustoClusterGateway(
-            AuthenticationMode authenticationMode,
+            string clusterIngestionConnectionString,
             Uri clusterQueryUri,
-            Uri clusterIngestionUri,
             string version,
             string? requestDescription = null)
         {
-            var queryStringBuilder = CreateKustoConnectionStringBuilder(
-                authenticationMode,
-                clusterQueryUri);
-            var ingestionStringBuilder = CreateKustoConnectionStringBuilder(
-                authenticationMode,
-                clusterIngestionUri);
+            var queryStringBuilder =
+                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+            var ingestionStringBuilder =
+                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+
+            //  Override query data source but keep the rest of connection string identical
+            queryStringBuilder.DataSource = clusterQueryUri.ToString();
 
             _queryProvider = KustoClientFactory.CreateCslQueryProvider(queryStringBuilder);
             _commandProvider = KustoClientFactory.CreateCslCmAdminProvider(queryStringBuilder);
@@ -170,36 +168,13 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             }
         }
 
-        private static KustoConnectionStringBuilder CreateKustoConnectionStringBuilder(
-            AuthenticationMode authenticationMode,
-            Uri clusterUri)
-        {
-            var builder = new KustoConnectionStringBuilder(clusterUri.ToString());
-
-            switch (authenticationMode)
-            {
-                case AuthenticationMode.AzCli:
-                    return builder.WithAadAzCliAuthentication(false);
-                case AuthenticationMode.Browser:
-                    return builder.WithAadUserPromptAuthentication();
-
-                default:
-                    throw new NotSupportedException(
-                        $"Unsupported authentication mode:  '{authenticationMode}'");
-            }
-        }
-
         private static async Task<Uri> GetQueryUriAsync(
-            AuthenticationMode authenticationMode,
-            Uri clusterIngestionUri)
+            string clusterIngestionConnectionString)
         {
             try
             {
-                var kustoConnectionStringBuilder = CreateKustoConnectionStringBuilder(
-                    authenticationMode,
-                    clusterIngestionUri);
-                var dmCommandProvider =
-                    KustoClientFactory.CreateCslCmAdminProvider(kustoConnectionStringBuilder);
+                var builder = new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+                var dmCommandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
                 var dataReader =
                     await dmCommandProvider.ExecuteControlCommandAsync("", ".show query service uri");
                 var clusterQueryUrl = Project(dataReader, r => r.GetString(0)).First();

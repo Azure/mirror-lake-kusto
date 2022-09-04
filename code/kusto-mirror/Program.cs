@@ -208,13 +208,11 @@ namespace Kusto.Mirror.ConsoleApp
         {
             if (Environment.GetEnvironmentVariable("kusto-mirror-automated-tests") != "true")
             {
-                var authenticationMode = parameters.AuthenticationMode.ToString();
                 var description = new RequestDescription
                 {
                     SessionId = sessionId,
                     Os = Environment.OSVersion.Platform.ToString(),
                     OsVersion = Environment.OSVersion.VersionString,
-                    AuthenticationMode = authenticationMode,
                     Tables = parameters.DeltaTableParameterizations.Select(j => new RequestDescriptionTable
                     {
                         IngestPartitionColumns = j.IngestPartitionColumns

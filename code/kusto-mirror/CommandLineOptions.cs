@@ -7,9 +7,6 @@ namespace Kusto.Mirror.ConsoleApp
         [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
         public bool Verbose { get; set; }
 
-        [Option('a', "authMode", Required = false, HelpText = "Authentication mode:  AppSecret, AzCli or Browser")]
-        public AuthenticationMode AuthenticationMode { get; set; } = AuthenticationMode.AzCli;
-
         [Option(
             "continuous",
             Required = false,
@@ -22,8 +19,12 @@ namespace Kusto.Mirror.ConsoleApp
         [Option('s', "storage", Required = false, HelpText = "Delta Table Storage URL")]
         public string DeltaTableStorageUrl { get; set; } = string.Empty;
 
-        [Option('i', "ingestion", Required = false, HelpText = "Cluster Ingestion URL")]
-        public string ClusterIngestionUrl { get; set; } = string.Empty;
+        [Option(
+            'i',
+            "ingestion",
+            Required = false,
+            HelpText = "Cluster Ingestion Connection string (cf https://docs.microsoft.com/en-us/azure/data-explorer/kusto/api/connection-strings/kusto)")]
+        public string ClusterIngestionConnectionString { get; set; } = string.Empty;
 
         [Option('d', "db", Required = false, HelpText = "Kusto Database")]
         public string Database { get; set; } = string.Empty;

@@ -10,38 +10,19 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
     internal class MainParameterization
     {
         public MainParameterization(
-            AuthenticationMode authenticationMode,
             bool continuousRun,
-            Uri clusterQueryUri,
+            string clusterIngestionConnectionString,
             Uri checkpointBlobUrl,
             IEnumerable<DeltaTableParameterization> deltaTableParameterizations)
         {
-            AuthenticationMode = authenticationMode;
             ContinuousRun = continuousRun;
-            ClusterIngestionUri = clusterQueryUri;
+            ClusterIngestionConnectionString = clusterIngestionConnectionString;
             CheckpointBlobUrl = checkpointBlobUrl;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
         }
 
         public static MainParameterization Create(CommandLineOptions options)
         {
-            Uri? clusterQueryUri;
-
-            if (Uri.TryCreate(options.ClusterIngestionUrl, UriKind.Absolute, out clusterQueryUri))
-            {
-                if (!string.IsNullOrWhiteSpace(clusterQueryUri.Query))
-                {
-                    throw new MirrorException(
-                        $"Cluster query URL can't contain query string:  "
-                        + $"'{options.ClusterIngestionUrl}'");
-                }
-            }
-            else
-            {
-                throw new MirrorException(
-                    $"Invalid cluster query URL:  '{options.ClusterIngestionUrl}'");
-            }
-
             Uri? checkpointBlobUrl;
             Uri? deltaTableStorageUrl;
 
@@ -63,18 +44,15 @@ namespace Kusto.Mirror.ConsoleApp.Parameters
                 options.IngestPartitionColumns);
 
             return new MainParameterization(
-                options.AuthenticationMode,
                 options.ContinuousRun,
-                clusterQueryUri,
+                options.ClusterIngestionConnectionString,
                 checkpointBlobUrl,
                 new[] { deltaTable });
         }
 
-        public AuthenticationMode AuthenticationMode { get; }
-        
         public bool ContinuousRun { get; }
-
-        public Uri ClusterIngestionUri { get; }
+        
+        public string ClusterIngestionConnectionString { get; }
 
         public Uri CheckpointBlobUrl { get; }
 
