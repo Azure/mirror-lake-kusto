@@ -27,25 +27,30 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             string version,
             string? requestDescription = null)
         {
-            var clusterQueryUri = await GetQueryUriAsync(clusterIngestionConnectionString);
+            var ingestionStringBuilder =
+                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+
+            //  Enforce AAD authentication
+            //  Especially useful if user simply provides cluster ingestion URI
+            ingestionStringBuilder.FederatedSecurity = true;
+            ingestionStringBuilder.DstsFederatedSecurity = false;
+
+            var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
 
             return new KustoClusterGateway(
-                clusterIngestionConnectionString,
+                ingestionStringBuilder,
                 clusterQueryUri,
                 version,
                 requestDescription);
         }
 
         private KustoClusterGateway(
-            string clusterIngestionConnectionString,
+            KustoConnectionStringBuilder ingestionStringBuilder,
             Uri clusterQueryUri,
             string version,
             string? requestDescription = null)
         {
-            var queryStringBuilder =
-                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
-            var ingestionStringBuilder =
-                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+            var queryStringBuilder = new KustoConnectionStringBuilder(ingestionStringBuilder);
 
             //  Override query data source but keep the rest of connection string identical
             queryStringBuilder.DataSource = clusterQueryUri.ToString();
@@ -169,14 +174,15 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
         }
 
         private static async Task<Uri> GetQueryUriAsync(
-            string clusterIngestionConnectionString)
+            KustoConnectionStringBuilder ingestionStringBuilder)
         {
             try
             {
-                var builder = new KustoConnectionStringBuilder(clusterIngestionConnectionString);
-                var dmCommandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
-                var dataReader =
-                    await dmCommandProvider.ExecuteControlCommandAsync("", ".show query service uri");
+                var dmCommandProvider =
+                    KustoClientFactory.CreateCslCmAdminProvider(ingestionStringBuilder);
+                var dataReader = await dmCommandProvider.ExecuteControlCommandAsync(
+                    "",
+                    ".show query service uri");
                 var clusterQueryUrl = Project(dataReader, r => r.GetString(0)).First();
                 var clusterQueryUri = new Uri(clusterQueryUrl);
 
