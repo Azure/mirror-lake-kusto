@@ -30,3 +30,20 @@ Managed Service Identity|N/A|Unsupported|Unsupported|Unsupported|Unsupported
 
 As we can see, KMT will try to create SAS tokens for the other resources if the identity used for the Cluster can.  Otherwise it falls back to using AAD Authentication.  This is to simplify scenarios since in order to use AAD everywhere, we need to configure the cluster and 2 storage accounts.
 
+## Connection string example
+
+The simplest example is with the Azure CLI authentication mechanism, where the connection string can simply be the ingestion URL itself:
+
+```
+https://ingest-mycluster.region.kusto.windows.net
+```
+
+Using service principal looks like this:
+
+```
+Data Source=https://ingest-mycluster.region.kusto.windows.net;Application Client Id=appid;Application Key=****;Authority Id=tennantid
+```
+
+The parameters are defined in [this documentation](https://docs.microsoft.com/en-us/azure/data-explorer/kusto/api/connection-strings/kusto#application-authentication-properties).
+
+In both cases, `AAD Federated Security` and `dSTS Federated Security` are set automatically and can be omitted.

@@ -295,6 +295,12 @@ namespace KustoMirrorTest
             string database,
             string kustoTable)
         {
+            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
+            var appId = GetEnvironmentVariable("kustoMirrorSpId");
+            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var ingestionConnectionString = $"Data Source={_ingestionUri};"
+                + $"Application Client Id={appId};Application Key={appSecret};"
+                + $"Authority Id={tenantId}";
             var args = new[]
             {
                 "-s",
@@ -302,7 +308,7 @@ namespace KustoMirrorTest
                 "-c",
                 checkpointBlobUrl,
                 "-i",
-                _ingestionUri.ToString(),
+                ingestionConnectionString,
                 "-d",
                 database,
                 "-t",

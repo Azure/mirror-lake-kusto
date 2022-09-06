@@ -408,7 +408,7 @@ print ExtentId=dynamic([{extentIdsText}])
             var restrictedViewPolicyText =
                 _isFreeCluster
                 ? string.Empty
-                : $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
+                : string.Empty;// $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
