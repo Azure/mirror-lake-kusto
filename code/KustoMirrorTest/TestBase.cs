@@ -192,7 +192,7 @@ namespace KustoMirrorTest
         #endregion
 
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
-        private const int CREATE_DB_AHEAD_COUNT = 5;
+        private const int CREATE_DB_AHEAD_COUNT = 1;
 
         private readonly static string? _singleExecPath;
         private readonly static Uri _ingestionUri;
