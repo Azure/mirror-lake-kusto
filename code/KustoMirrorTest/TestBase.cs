@@ -4,6 +4,7 @@ using Azure.Core;
 using Azure.Identity;
 using Kusto.Data.Linq;
 using Kusto.Mirror.ConsoleApp;
+using Kusto.Mirror.ConsoleApp.Kusto;
 using Microsoft.Azure.Management.Kusto;
 using Microsoft.Azure.Management.Kusto.Models;
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
@@ -12,6 +13,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Data;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -32,6 +34,8 @@ namespace KustoMirrorTest
         protected class SessionHolder : IAsyncDisposable
         {
             private readonly string _testSetId;
+            private readonly string _deltaTableFolder;
+            private readonly string _kustoTable;
             private readonly Func<string, string> _getResourceFunc;
             private readonly Func<string, string, string, string, Task> _runMirrorAsync;
             private readonly SparkSessionHolder _sparkSessionHolder;
@@ -40,6 +44,8 @@ namespace KustoMirrorTest
             public SessionHolder(
                 string testSetId,
                 int testId,
+                string deltaTableFolder,
+                string kustoTable,
                 Func<string, string> getResourceFunc,
                 Func<string, string, string, string, Task> runMirrorAsync,
                 SparkSessionHolder sparkSessionHolder,
@@ -47,6 +53,8 @@ namespace KustoMirrorTest
             {
                 _testSetId = testSetId;
                 TestId = testId;
+                _deltaTableFolder = deltaTableFolder;
+                _kustoTable = kustoTable;
                 _getResourceFunc = getResourceFunc;
                 _sparkSessionHolder = sparkSessionHolder;
                 _runMirrorAsync = runMirrorAsync;
@@ -70,17 +78,26 @@ namespace KustoMirrorTest
                 return script;
             }
 
-            public async Task RunMirrorAsync(string deltaTableFolder, string kustoTable)
+            public async Task RunMirrorAsync()
             {
                 var containerUrl = GetEnvironmentVariable("kustoMirrorContainerUrl");
                 var checkpointBlobUrl = $"{containerUrl}/{SynapseRootFolder}/checkpoint.csv";
-                var deltaTableStorageUrl = $"{containerUrl}/{SynapseRootFolder}/{deltaTableFolder}";
+                var deltaTableStorageUrl = $"{containerUrl}/{SynapseRootFolder}/{_deltaTableFolder}";
 
                 await _runMirrorAsync(
                     checkpointBlobUrl,
                     deltaTableStorageUrl,
                     _dbHolder.DbName,
-                    kustoTable);
+                    _kustoTable);
+            }
+
+            public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
+                string queryTextAfterTable,
+                Func<IDataRecord, T> projection)
+            {
+                return await _dbHolder.ExecuteQueryAsync(
+                    $"{_kustoTable}\n{queryTextAfterTable}",
+                    projection);
             }
 
             async ValueTask IAsyncDisposable.DisposeAsync()
@@ -118,15 +135,26 @@ namespace KustoMirrorTest
 
         protected class DbHolder : IAsyncDisposable
         {
+            private readonly DatabaseGateway _dbGateway;
             private readonly Func<Task> _deleteDbFunc;
 
-            public DbHolder(string dbName, Func<Task> deleteDbFunc)
+            public DbHolder(DatabaseGateway dbGateway, Func<Task> deleteDbFunc)
             {
-                DbName = dbName;
+                _dbGateway = dbGateway;
                 _deleteDbFunc = deleteDbFunc;
             }
 
-            public string DbName { get; }
+            public string DbName => _dbGateway.DatabaseName;
+
+            public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
+                string queryText,
+                Func<IDataRecord, T> projection)
+            {
+                return await _dbGateway.ExecuteQueryAsync(
+                    queryText,
+                    projection,
+                    CancellationToken.None);
+            }
 
             async ValueTask IAsyncDisposable.DisposeAsync()
             {
@@ -136,13 +164,16 @@ namespace KustoMirrorTest
 
         private class DbManagement
         {
+            private readonly KustoClusterGateway _clusterGateway;
             private readonly Func<Task<string>> _createDbFunc;
             private readonly Func<string, Task> _deleteDbFunc;
 
             public DbManagement(
+                KustoClusterGateway clusterGateway,
                 Func<Task<string>> createDbFunc,
                 Func<string, Task> deleteDbFunc)
             {
+                _clusterGateway = clusterGateway;
                 _createDbFunc = createDbFunc;
                 _deleteDbFunc = deleteDbFunc;
             }
@@ -151,7 +182,7 @@ namespace KustoMirrorTest
             {
                 var dbName = await _createDbFunc();
                 var dbHolder = new DbHolder(
-                    dbName,
+                    new DatabaseGateway(_clusterGateway, dbName),
                     async () => await _deleteDbFunc(dbName));
 
                 return dbHolder;
@@ -192,7 +223,7 @@ namespace KustoMirrorTest
         #endregion
 
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
-        private const int CREATE_DB_AHEAD_COUNT = 1;
+        private const int CREATE_DB_AHEAD_COUNT = 0;
 
         private readonly static string? _singleExecPath;
         private readonly static Uri _ingestionUri;
@@ -274,7 +305,9 @@ namespace KustoMirrorTest
         #endregion
 
         #region Session
-        protected async Task<SessionHolder> GetTestSessionAsync()
+        protected async Task<SessionHolder> GetTestSessionAsync(
+            string deltaTableFolder,
+            string kustoTable)
         {
             var sparkSessionTask = GetSparkSessionAsync();
             var db = await GetNewDbAsync();
@@ -283,6 +316,8 @@ namespace KustoMirrorTest
             return new SessionHolder(
                 _testSetId,
                 Interlocked.Increment(ref _testId),
+                deltaTableFolder,
+                kustoTable,
                 GetResource,
                 RunMirrorAsync,
                 sparkSession,
@@ -295,12 +330,7 @@ namespace KustoMirrorTest
             string database,
             string kustoTable)
         {
-            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
-            var appId = GetEnvironmentVariable("kustoMirrorSpId");
-            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
-            var ingestionConnectionString = $"Data Source={_ingestionUri};"
-                + $"Application Client Id={appId};Application Key={appSecret};"
-                + $"Authority Id={tenantId}";
+            var ingestionConnectionString = GetIngestionConnectionString();
             var args = new[]
             {
                 "-s",
@@ -323,6 +353,17 @@ namespace KustoMirrorTest
             {
                 throw new NotImplementedException("Out-of-proc");
             }
+        }
+
+        private static string GetIngestionConnectionString()
+        {
+            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
+            var appId = GetEnvironmentVariable("kustoMirrorSpId");
+            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var ingestionConnectionString = $"Data Source={_ingestionUri};"
+                + $"Application Client Id={appId};Application Key={appSecret};"
+                + $"Authority Id={tenantId}";
+            return ingestionConnectionString;
         }
         #endregion
 
@@ -541,6 +582,7 @@ namespace KustoMirrorTest
             var resourceGroup = GetEnvironmentVariable("kustoMirrorResourceGroup");
             var clusterName = GetEnvironmentVariable("kustoMirrorCluster");
             var dbPrefix = GetEnvironmentVariable("kustoMirrorDbPrefix");
+            var ingestionConnectionString = GetIngestionConnectionString();
             var credential = new ClientCredential(appId, appSecret);
             var authenticationContext = new AuthenticationContext($"https://login.windows.net/{tenantId}");
             var result = await authenticationContext.AcquireTokenAsync(
@@ -561,10 +603,14 @@ namespace KustoMirrorTest
             var clusterTask = kustoManagementClient.Clusters.GetAsync(resourceGroup, clusterName);
             var cluster = await clusterTask;
             var dbCreationTaskQueue = new ConcurrentQueue<Task<string>>();
+            var clusterGateway = await KustoClusterGateway.CreateAsync(
+                ingestionConnectionString,
+                string.Empty);
 
             await Task.WhenAll(dbsDeletionTasks);
 
             var dbManagement = new DbManagement(
+                clusterGateway,
                 async () =>
                 {
                     Func<Task<string>> dbCreationFunc = async () =>
