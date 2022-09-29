@@ -1,5 +1,6 @@
 ﻿using Azure.Core;
 using Azure.Identity;
+using Kusto.Data;
 using Kusto.Mirror.ConsoleApp.Kusto;
 using Kusto.Mirror.ConsoleApp.Parameters;
 using Kusto.Mirror.ConsoleApp.Storage;
@@ -27,7 +28,8 @@ namespace Kusto.Mirror.ConsoleApp
         {
             Trace.TraceInformation("Initialize Storage connections...");
 
-            var storageCredentials = CreateStorageCredentials(parameters.AuthenticationMode);
+            var storageCredentials =
+                CreateNonSasStorageCredentials(parameters.ClusterIngestionConnectionString);
             var globalTableStatus = await GlobalTableStatus.RetrieveAsync(
                 parameters.CheckpointBlobUrl,
                 storageCredentials,
@@ -36,8 +38,7 @@ namespace Kusto.Mirror.ConsoleApp
             Trace.TraceInformation("Initialize Kusto Cluster connections...");
 
             var clusterGateway = await KustoClusterGateway.CreateAsync(
-                parameters.AuthenticationMode,
-                parameters.ClusterIngestionUri,
+                parameters.ClusterIngestionConnectionString,
                 version,
                 requestDescription);
             var isFreeCluster = await clusterGateway.IsFreeClusterAsync(ct);
@@ -79,21 +80,35 @@ namespace Kusto.Mirror.ConsoleApp
             return new MirrorOrchestration(orchestrations);
         }
 
-        private static TokenCredential CreateStorageCredentials(
-            AuthenticationMode authenticationMode)
+        private static TokenCredential CreateNonSasStorageCredentials(
+            string clusterIngestionConnectionString)
         {
-            switch (authenticationMode)
-            {
-                case AuthenticationMode.AppSecret:
-                    throw new NotSupportedException();
-                case AuthenticationMode.AzCli:
-                    return new AzureCliCredential();
-                case AuthenticationMode.Browser:
-                    return new InteractiveBrowserCredential();
+            var builder = new KustoConnectionStringBuilder(clusterIngestionConnectionString);
 
-                default:
-                    throw new NotSupportedException(
-                        $"Unsupported authentication mode '{authenticationMode}'");
+            //  Enforce federated security
+            builder.FederatedSecurity = true;
+            builder.DstsFederatedSecurity = false;
+
+            if (string.IsNullOrWhiteSpace(builder.ApplicationClientId))
+            {
+                return new AzureCliCredential();
+            }
+            else if (string.IsNullOrWhiteSpace(builder.Authority))
+            {
+                throw new MirrorException(
+                    "Authority / tennant ID must be specified in "
+                    + "connection string when client ID is specified");
+            }
+            else if (!string.IsNullOrWhiteSpace(builder.ApplicationKey))
+            {
+                return new ClientSecretCredential(
+                    builder.Authority,
+                    builder.ApplicationClientId,
+                    builder.ApplicationKey);
+            }
+            else
+            {
+                throw new MirrorException("Connection string unsupported");
             }
         }
         #endregion

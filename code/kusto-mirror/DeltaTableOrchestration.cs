@@ -174,8 +174,10 @@ namespace Kusto.Mirror.ConsoleApp
             CancellationToken ct)
         {
             var logs = _tableStatus.GetBatch(startTxId);
+            var queued = logs.Adds
+                .Where(a => a.State == TransactionItemState.QueuedForIngestion);
 
-            if (logs.Adds.Where(a => a.State == TransactionItemState.QueuedForIngestion).Any())
+            if (queued.Any())
             {
                 var itemMap = logs
                     .Adds
@@ -408,7 +410,7 @@ print ExtentId=dynamic([{extentIdsText}])
             var restrictedViewPolicyText =
                 _isFreeCluster
                 ? string.Empty
-                : $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
+                : string.Empty;// $".alter table {stagingTableSchema.Name} policy restricted_view_access true";
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
@@ -438,7 +440,11 @@ print ExtentId=dynamic([{extentIdsText}])
             {
                 Trace.TraceInformation($"Queuing {toBeAdded.Count()} blobs for ingestion");
 
-                var queueTasks = toBeAdded
+                var toBeQueued = toBeAdded
+                    .Where(a => a.RecordCount > 0);
+                var toDone = toBeAdded
+                    .Where(a => a.RecordCount == 0);
+                var queueTasks = toBeQueued
                     .Select(async item =>
                     {
                         if (item.PartitionValues == null)
@@ -453,11 +459,13 @@ print ExtentId=dynamic([{extentIdsText}])
                         await QueueItemAsync(stagingTable, item, ingestionMappings, ct);
                     })
                     .ToImmutableArray();
-                var newItems = toBeAdded
+                var queuedItems = toBeAdded
                     .Select(item => item.UpdateState(TransactionItemState.QueuedForIngestion));
+                var doneItems = toDone
+                    .Select(item => item.UpdateState(TransactionItemState.Done));
 
                 await Task.WhenAll(queueTasks);
-                await _tableStatus.PersistNewItemsAsync(newItems, ct);
+                await _tableStatus.PersistNewItemsAsync(queuedItems.Concat(doneItems), ct);
             }
         }
 

@@ -23,34 +23,37 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
 
         #region Constructors
         public static async Task<KustoClusterGateway> CreateAsync(
-            AuthenticationMode authenticationMode,
-            Uri clusterIngestionUri,
+            string clusterIngestionConnectionString,
             string version,
             string? requestDescription = null)
         {
-            var clusterQueryUri = await GetQueryUriAsync(authenticationMode, clusterIngestionUri);
+            var ingestionStringBuilder =
+                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+
+            //  Enforce AAD authentication
+            //  Especially useful if user simply provides cluster ingestion URI
+            ingestionStringBuilder.FederatedSecurity = true;
+            ingestionStringBuilder.DstsFederatedSecurity = false;
+
+            var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
 
             return new KustoClusterGateway(
-                authenticationMode,
+                ingestionStringBuilder,
                 clusterQueryUri,
-                clusterIngestionUri,
                 version,
                 requestDescription);
         }
 
         private KustoClusterGateway(
-            AuthenticationMode authenticationMode,
+            KustoConnectionStringBuilder ingestionStringBuilder,
             Uri clusterQueryUri,
-            Uri clusterIngestionUri,
             string version,
             string? requestDescription = null)
         {
-            var queryStringBuilder = CreateKustoConnectionStringBuilder(
-                authenticationMode,
-                clusterQueryUri);
-            var ingestionStringBuilder = CreateKustoConnectionStringBuilder(
-                authenticationMode,
-                clusterIngestionUri);
+            var queryStringBuilder = new KustoConnectionStringBuilder(ingestionStringBuilder);
+
+            //  Override query data source but keep the rest of connection string identical
+            queryStringBuilder.DataSource = clusterQueryUri.ToString();
 
             _queryProvider = KustoClientFactory.CreateCslQueryProvider(queryStringBuilder);
             _commandProvider = KustoClientFactory.CreateCslCmAdminProvider(queryStringBuilder);
@@ -170,38 +173,16 @@ namespace Kusto.Mirror.ConsoleApp.Kusto
             }
         }
 
-        private static KustoConnectionStringBuilder CreateKustoConnectionStringBuilder(
-            AuthenticationMode authenticationMode,
-            Uri clusterUri)
-        {
-            var builder = new KustoConnectionStringBuilder(clusterUri.ToString());
-
-            switch (authenticationMode)
-            {
-                case AuthenticationMode.AzCli:
-                    return builder.WithAadAzCliAuthentication(false);
-                case AuthenticationMode.Browser:
-                    return builder.WithAadUserPromptAuthentication();
-
-                default:
-                    throw new NotSupportedException(
-                        $"Unsupported authentication mode:  '{authenticationMode}'");
-            }
-        }
-
         private static async Task<Uri> GetQueryUriAsync(
-            AuthenticationMode authenticationMode,
-            Uri clusterIngestionUri)
+            KustoConnectionStringBuilder ingestionStringBuilder)
         {
             try
             {
-                var kustoConnectionStringBuilder = CreateKustoConnectionStringBuilder(
-                    authenticationMode,
-                    clusterIngestionUri);
                 var dmCommandProvider =
-                    KustoClientFactory.CreateCslCmAdminProvider(kustoConnectionStringBuilder);
-                var dataReader =
-                    await dmCommandProvider.ExecuteControlCommandAsync("", ".show query service uri");
+                    KustoClientFactory.CreateCslCmAdminProvider(ingestionStringBuilder);
+                var dataReader = await dmCommandProvider.ExecuteControlCommandAsync(
+                    "",
+                    ".show query service uri");
                 var clusterQueryUrl = Project(dataReader, r => r.GetString(0)).First();
                 var clusterQueryUri = new Uri(clusterQueryUrl);
 
