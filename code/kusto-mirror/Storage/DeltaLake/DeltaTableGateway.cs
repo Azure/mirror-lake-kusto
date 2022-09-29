@@ -111,7 +111,7 @@ namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
             {   //  No checkpoint, just read the logs
                 return await GetTransactionLogFromAsync(
                     currentLog == null ? null : currentLog.EndTxId + 1,
-                    null,
+                    currentLog == null ? null : 9,
                     kustoDatabaseName,
                     kustoTableName,
                     ct);
