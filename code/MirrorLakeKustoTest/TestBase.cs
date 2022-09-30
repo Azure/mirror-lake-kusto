@@ -345,6 +345,7 @@ namespace MirrorLakeKustoTest
                 kustoTable
             };
 
+            Console.WriteLine($"> mirror-lake-kusto {string.Join(' ', args)}");
             if (string.IsNullOrEmpty(_singleExecPath))
             {
                 await Program.Main(args);
