@@ -10,4 +10,4 @@ There are many options and authentication methods, but a straightforward example
 mirror-lake-kusto -s <Delta Table ADLS folder URL> -i <Kusto Cluster Ingestion URL> -d <Kusto DB> -t <Kusto Table> -c <Checkpoint blob URL>
 ```
 
-The CLI will keep the two tables in sync by ingesting and deleting data in Kusto.  No duplication, no data loss.
+The CLI will keep the two tables in sync by ingesting and deleting data in Kusto.  **No duplication, no data loss.**
