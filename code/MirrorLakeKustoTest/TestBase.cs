@@ -80,7 +80,7 @@ namespace MirrorLakeKustoTest
 
             public async Task RunMirrorAsync()
             {
-                var containerUrl = GetEnvironmentVariable("kustoMirrorContainerUrl");
+                var containerUrl = GetEnvironmentVariable("mlkContainerUrl");
                 var checkpointBlobUrl = $"{containerUrl}/{SynapseRootFolder}/checkpoint.csv";
                 var deltaTableStorageUrl = $"{containerUrl}/{SynapseRootFolder}/{_deltaTableFolder}";
 
@@ -241,8 +241,8 @@ namespace MirrorLakeKustoTest
             var now = DateTime.Now;
 
             ReadEnvironmentVariables();
-            _singleExecPath = Environment.GetEnvironmentVariable("kustoMirrorSingleExecPath");
-            _ingestionUri = new Uri(GetEnvironmentVariable("kustoMirrorIngestionUri"));
+            _singleExecPath = Environment.GetEnvironmentVariable("mlkSingleExecPath");
+            _ingestionUri = new Uri(GetEnvironmentVariable("mlkIngestionUri"));
             _testSetId = $"{now.ToString("yyyy-MM-dd")}/{now.ToString("HH:mm:ss")}";
             _sparkSessionClient = CreateSparkSessionClient();
             _dbManagementTask = CreateDbManagementAsync();
@@ -295,9 +295,9 @@ namespace MirrorLakeKustoTest
         #region Azure
         private static ClientSecretCredential CreateAzureCredentials()
         {
-            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
-            var appId = GetEnvironmentVariable("kustoMirrorSpId");
-            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var tenantId = GetEnvironmentVariable("mlkTenantId");
+            var appId = GetEnvironmentVariable("mlkSpId");
+            var appSecret = GetEnvironmentVariable("mlkSpSecret");
             var credential = new ClientSecretCredential(tenantId, appId, appSecret);
 
             return credential;
@@ -357,9 +357,9 @@ namespace MirrorLakeKustoTest
 
         private static string GetIngestionConnectionString()
         {
-            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
-            var appId = GetEnvironmentVariable("kustoMirrorSpId");
-            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
+            var tenantId = GetEnvironmentVariable("mlkTenantId");
+            var appId = GetEnvironmentVariable("mlkSpId");
+            var appSecret = GetEnvironmentVariable("mlkSpSecret");
             var ingestionConnectionString = $"Data Source={_ingestionUri};"
                 + $"Application Client Id={appId};Application Key={appSecret};"
                 + $"Authority Id={tenantId}";
@@ -538,8 +538,8 @@ namespace MirrorLakeKustoTest
 
         private static SparkSessionClient CreateSparkSessionClient()
         {
-            var sparkPoolName = GetEnvironmentVariable("kustoMirrorSparkPoolName");
-            var endpoint = GetEnvironmentVariable("kustoMirrorSparkEndpoint");
+            var sparkPoolName = GetEnvironmentVariable("mlkSparkPoolName");
+            var endpoint = GetEnvironmentVariable("mlkSparkEndpoint");
             var credential = CreateAzureCredentials();
             var client = new SparkSessionClient(new Uri(endpoint), sparkPoolName, credential);
 
@@ -575,13 +575,13 @@ namespace MirrorLakeKustoTest
         #region Kusto
         private static async Task<DbManagement> CreateDbManagementAsync()
         {
-            var tenantId = GetEnvironmentVariable("kustoMirrorTenantId");
-            var appId = GetEnvironmentVariable("kustoMirrorSpId");
-            var appSecret = GetEnvironmentVariable("kustoMirrorSpSecret");
-            var subscriptionId = GetEnvironmentVariable("kustoMirrorSubscriptionId");
-            var resourceGroup = GetEnvironmentVariable("kustoMirrorResourceGroup");
-            var clusterName = GetEnvironmentVariable("kustoMirrorCluster");
-            var dbPrefix = GetEnvironmentVariable("kustoMirrorDbPrefix");
+            var tenantId = GetEnvironmentVariable("mlkTenantId");
+            var appId = GetEnvironmentVariable("mlkSpId");
+            var appSecret = GetEnvironmentVariable("mlkSpSecret");
+            var subscriptionId = GetEnvironmentVariable("mlkSubscriptionId");
+            var resourceGroup = GetEnvironmentVariable("mlkResourceGroup");
+            var clusterName = GetEnvironmentVariable("mlkCluster");
+            var dbPrefix = GetEnvironmentVariable("mlkDbPrefix");
             var ingestionConnectionString = GetIngestionConnectionString();
             var credential = new ClientCredential(appId, appSecret);
             var authenticationContext = new AuthenticationContext($"https://login.windows.net/{tenantId}");
