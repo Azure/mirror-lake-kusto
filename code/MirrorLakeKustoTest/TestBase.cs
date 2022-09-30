@@ -224,6 +224,7 @@ namespace MirrorLakeKustoTest
 
         private const string SPARK_SESSION_ID_PATH = "SparkSession.txt";
         private const int CREATE_DB_AHEAD_COUNT = 0;
+        private static readonly TimeSpan PROCESS_TIMEOUT = TimeSpan.FromMinutes(5);
 
         private readonly static string? _singleExecPath;
         private readonly static Uri _ingestionUri;
@@ -352,7 +353,66 @@ namespace MirrorLakeKustoTest
             }
             else
             {
-                throw new NotImplementedException("Out-of-proc");
+                await RunMirrorOutOfProcAsync(args);
+            }
+        }
+
+        private static async Task RunMirrorOutOfProcAsync(string[] args)
+        {
+            using (var process = new Process())
+            {
+                //  Disable API calls for tests
+                //process.StartInfo.EnvironmentVariables.Add(DISABLE_KUSTO_TRACING, "true");
+                process.StartInfo.FileName = _singleExecPath;
+                process.StartInfo.RedirectStandardError = true;
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.UseShellExecute = false;
+                foreach (var arg in args)
+                {
+                    process.StartInfo.ArgumentList.Add(arg);
+                }
+                process.OutputDataReceived += (sender, e) =>
+                {
+                    Console.Write($"Output:  {e.Data}");
+                };
+                process.ErrorDataReceived += (sender, e) =>
+                {
+                    Console.Write($"Error:  {e.Data}");
+                };
+
+                var started = process.Start();
+
+                if (started)
+                {
+                    var ct = new CancellationTokenSource(PROCESS_TIMEOUT).Token;
+
+                    await process.WaitForExitAsync(ct);
+
+                    var outputs = await process.StandardOutput.ReadToEndAsync();
+                    var errors = await process.StandardError.ReadToEndAsync();
+
+                    if (!string.IsNullOrWhiteSpace(outputs))
+                    {
+                        Console.WriteLine("Outputs:");
+                        Console.WriteLine(outputs);
+                    }
+                    if (!string.IsNullOrWhiteSpace(errors))
+                    {
+                        Console.WriteLine("Errors:");
+                        Console.WriteLine(errors);
+                    }
+
+                    if (process.ExitCode != 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Process returned with error code '{_singleExecPath}'");
+                    }
+                }
+                else
+                {
+                    throw new InvalidProgramException(
+                        $"Can't start process '{_singleExecPath}'");
+                }
             }
         }
 
