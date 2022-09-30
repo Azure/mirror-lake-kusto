@@ -1,4 +1,4 @@
-﻿namespace Kusto.Mirror.ConsoleApp
+﻿namespace MirrorLakeKusto
 {
     internal class RequestDescriptionTable
     {

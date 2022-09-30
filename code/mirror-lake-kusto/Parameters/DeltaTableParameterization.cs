@@ -1,4 +1,4 @@
-﻿namespace Kusto.Mirror.ConsoleApp.Parameters
+﻿namespace MirrorLakeKusto.Parameters
 {
     public class DeltaTableParameterization
     {

@@ -10,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Kusto
+namespace MirrorLakeKusto.Kusto
 {
     public class KustoClusterGateway
     {

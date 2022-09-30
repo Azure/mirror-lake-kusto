@@ -1,14 +1,14 @@
 ﻿using Azure.Core;
 using Azure.Identity;
 using Kusto.Data;
-using Kusto.Mirror.ConsoleApp.Kusto;
-using Kusto.Mirror.ConsoleApp.Parameters;
-using Kusto.Mirror.ConsoleApp.Storage;
-using Kusto.Mirror.ConsoleApp.Storage.DeltaLake;
+using MirrorLakeKusto.Kusto;
+using MirrorLakeKusto.Parameters;
+using MirrorLakeKusto.Storage;
+using MirrorLakeKusto.Storage.DeltaLake;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
-namespace Kusto.Mirror.ConsoleApp
+namespace MirrorLakeKusto
 {
     internal class MirrorOrchestration : IAsyncDisposable
     {

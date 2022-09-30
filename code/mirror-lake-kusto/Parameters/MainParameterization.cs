@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Parameters
+namespace MirrorLakeKusto.Parameters
 {
     internal class MainParameterization
     {

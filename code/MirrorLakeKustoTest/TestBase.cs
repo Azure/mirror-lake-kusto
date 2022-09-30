@@ -3,8 +3,8 @@ using Azure.Analytics.Synapse.Spark.Models;
 using Azure.Core;
 using Azure.Identity;
 using Kusto.Data.Linq;
-using Kusto.Mirror.ConsoleApp;
-using Kusto.Mirror.ConsoleApp.Kusto;
+using MirrorLakeKusto;
+using MirrorLakeKusto.Kusto;
 using Microsoft.Azure.Management.Kusto;
 using Microsoft.Azure.Management.Kusto.Models;
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
@@ -22,7 +22,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit.Sdk;
 
-namespace KustoMirrorTest
+namespace MirrorLakeKustoTest
 {
     /// <summary>
     /// Spark stuff based on 

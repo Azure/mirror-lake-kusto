@@ -12,7 +12,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
+namespace MirrorLakeKusto.Storage.Bookmark
 {
     public class BookmarkGateway
     {

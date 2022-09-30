@@ -1,11 +1,11 @@
 ﻿using Kusto.Data.Common;
 using Kusto.Data.Ingestion;
 using Kusto.Ingest;
-using Kusto.Mirror.ConsoleApp.Storage;
+using MirrorLakeKusto.Storage;
 using System.Collections.Immutable;
 using System.Data;
 
-namespace Kusto.Mirror.ConsoleApp.Kusto
+namespace MirrorLakeKusto.Kusto
 {
     public class DatabaseGateway
     {

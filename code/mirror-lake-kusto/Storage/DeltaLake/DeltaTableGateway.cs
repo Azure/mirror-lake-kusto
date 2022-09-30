@@ -11,7 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Storage.DeltaLake
+namespace MirrorLakeKusto.Storage.DeltaLake
 {
     internal class DeltaTableGateway
     {

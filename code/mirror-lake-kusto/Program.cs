@@ -1,6 +1,6 @@
 ﻿using CommandLine;
 using CommandLine.Text;
-using Kusto.Mirror.ConsoleApp.Parameters;
+using MirrorLakeKusto.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -12,7 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp
+namespace MirrorLakeKusto
 {
     public class Program
     {

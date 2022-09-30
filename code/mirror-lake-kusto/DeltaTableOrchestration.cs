@@ -3,13 +3,13 @@ using Kusto.Data.Common;
 using Kusto.Data.Exceptions;
 using Kusto.Data.Ingestion;
 using Kusto.Ingest;
-using Kusto.Mirror.ConsoleApp.Kusto;
-using Kusto.Mirror.ConsoleApp.Storage;
-using Kusto.Mirror.ConsoleApp.Storage.DeltaLake;
+using MirrorLakeKusto.Kusto;
+using MirrorLakeKusto.Storage;
+using MirrorLakeKusto.Storage.DeltaLake;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
-namespace Kusto.Mirror.ConsoleApp
+namespace MirrorLakeKusto
 {
     internal class DeltaTableOrchestration
     {

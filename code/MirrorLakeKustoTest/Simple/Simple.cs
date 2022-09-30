@@ -1,4 +1,4 @@
-namespace KustoMirrorTest.Simple
+namespace MirrorLakeKustoTest.Simple
 {
     public class Simple : TestBase
     {

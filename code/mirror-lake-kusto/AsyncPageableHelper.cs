@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp
+namespace MirrorLakeKusto
 {
     public static class AsyncPageableHelper
     {

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Storage
+namespace MirrorLakeKusto.Storage
 {
     internal class TableDefinition
     {

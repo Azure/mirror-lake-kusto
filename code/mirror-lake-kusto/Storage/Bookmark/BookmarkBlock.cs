@@ -1,4 +1,4 @@
-﻿namespace Kusto.Mirror.ConsoleApp.Storage.Bookmark
+﻿namespace MirrorLakeKusto.Storage.Bookmark
 {
     public class BookmarkBlock
     {

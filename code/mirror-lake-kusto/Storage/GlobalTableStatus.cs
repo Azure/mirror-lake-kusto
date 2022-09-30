@@ -1,5 +1,5 @@
 ﻿using Azure.Core;
-using Kusto.Mirror.ConsoleApp.Storage.Bookmark;
+using MirrorLakeKusto.Storage.Bookmark;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Kusto.Mirror.ConsoleApp.Storage
+namespace MirrorLakeKusto.Storage
 {
     internal class GlobalTableStatus
     {

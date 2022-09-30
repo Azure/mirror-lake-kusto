@@ -1,6 +1,6 @@
 ﻿using System.Runtime.Serialization;
 
-namespace Kusto.Mirror.ConsoleApp
+namespace MirrorLakeKusto
 {
     [Serializable]
     internal class MirrorException : Exception

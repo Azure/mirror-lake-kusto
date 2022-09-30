@@ -7,7 +7,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
-namespace Kusto.Mirror.ConsoleApp.Storage
+namespace MirrorLakeKusto.Storage
 {
     /// <summary>Leverages https://joshclose.github.io/CsvHelper/.</summary>
     internal class TransactionItem
