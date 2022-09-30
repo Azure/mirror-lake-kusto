@@ -168,7 +168,7 @@ namespace MirrorLakeKusto
         {
             ConfigureTrace(options.Verbose);
             Trace.TraceInformation("");
-            Trace.TraceInformation("Initialization...");
+            Trace.WriteLine("Initialization...");
 
             var parameters = MainParameterization.Create(options);
             var requestDescription = CreateRequestDescription(parameters, sessionId);
@@ -190,7 +190,7 @@ namespace MirrorLakeKusto
                     requestDescription,
                     cancellationTokenSource.Token))
                 {
-                    Trace.TraceInformation("Starting loop");
+                    Trace.WriteLine("Start mirroring...");
 
                     await orchestration.RunAsync(cancellationTokenSource.Token);
                 }

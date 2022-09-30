@@ -59,6 +59,7 @@ namespace MirrorLakeKusto
 
                     if (newLogs != null)
                     {   //  Persists the logs and loop again to process them
+                        Trace.WriteLine($"Mirroring logs {newLogs.StartTxId} to {newLogs.EndTxId}");
                         await PersistNewLogsAsync(newLogs, ct);
                     }
                     else if (_continuousRun)
