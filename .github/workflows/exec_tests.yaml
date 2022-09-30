@@ -38,7 +38,6 @@ jobs:
     - name: Build single file executable
       shell:  bash
       run: |
-      # Exec path
         if [ ${{ github.event.inputs.outOfProc }} == "true" ]
         then
           echo "mlkSingleExecPath=bin/mirror-lake-kusto.exe" >> $GITHUB_ENV
