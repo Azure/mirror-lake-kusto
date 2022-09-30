@@ -9,6 +9,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace MirrorLakeKusto.Storage.DeltaLake
@@ -16,13 +17,20 @@ namespace MirrorLakeKusto.Storage.DeltaLake
     internal class DeltaTableGateway
     {
         #region Inner Types
-        private class Checkpoint
+        internal class Checkpoint
         {
             public long Version { get; set; }
 
             public long Size { get; set; }
         }
         #endregion
+
+        private readonly static DataTableGatewaySerializerContext _dataTableGatewaySerializerContext =
+            new DataTableGatewaySerializerContext(
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
 
         private const string TX_ID_FORMAT = "00000000000000000000";
         private const string TX_ID_EXTENSION = ".json";
@@ -263,12 +271,23 @@ namespace MirrorLakeKusto.Storage.DeltaLake
 
         private async Task<long> ReadCheckpointTxIdAsync(BlobClient lastCheckpointBlob)
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var checkpointResult = await lastCheckpointBlob.DownloadContentAsync();
             var checkpointText = checkpointResult.Value.Content.ToString();
-            var checkpoint = JsonSerializer.Deserialize<Checkpoint>(checkpointText, options);
+            var checkpointObject = JsonSerializer.Deserialize(
+                checkpointText,
+                typeof(Checkpoint),
+                _dataTableGatewaySerializerContext);
 
-            return checkpoint!.Version;
+            if (checkpointObject == null)
+            {
+                throw new InvalidOperationException($"Could deserialize checkpoint object:  '{checkpointText}'");
+            }
+            else
+            {
+                var checkpoint = (Checkpoint)checkpointObject;
+
+                return checkpoint.Version;
+            }
         }
 
         private async Task<TransactionLog> ExtractCheckpointTxLogAsync(
@@ -288,5 +307,10 @@ namespace MirrorLakeKusto.Storage.DeltaLake
 
             return log;
         }
+    }
+
+    [JsonSerializable(typeof(DeltaTableGateway.Checkpoint))]
+    internal partial class DataTableGatewaySerializerContext : JsonSerializerContext
+    {
     }
 }

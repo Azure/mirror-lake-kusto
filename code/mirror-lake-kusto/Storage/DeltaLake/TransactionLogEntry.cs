@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace MirrorLakeKusto.Storage.DeltaLake
@@ -125,11 +126,13 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             string kustoTableName,
             string jsonText)
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var lines = jsonText.Split('\n');
             var entries = lines
                 .Where(l => !string.IsNullOrWhiteSpace(l))
-                .Select(l => JsonSerializer.Deserialize<TransactionLogEntry>(l, options)!)
+                .Select(l => (TransactionLogEntry)JsonSerializer.Deserialize(
+                    l,
+                    typeof(TransactionLogEntry),
+                    _transactionLogEntrySerializerContext)!)
                 .ToImmutableArray();
             var metadata = entries
                 .Where(e => e.Metadata != null)
@@ -265,37 +268,41 @@ namespace MirrorLakeKusto.Storage.DeltaLake
         }
         private static IImmutableList<ColumnDefinition> ExtractSchema(string schemaString)
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var typeData =
-                JsonSerializer.Deserialize<TransactionLogEntry.MetadataData.StructTypeData>(
+            var typeDataObject = JsonSerializer.Deserialize(
                     schemaString,
-                    options);
+                    typeof(TransactionLogEntry.MetadataData.StructTypeData),
+                    _transactionLogEntrySerializerContext);
 
-            if (typeData == null)
+            if (typeDataObject == null)
             {
                 throw new ArgumentException(
                     $"Incorrect format:  '{schemaString}'",
                     nameof(schemaString));
             }
-            if (!string.Equals(typeData.Type, "struct", StringComparison.OrdinalIgnoreCase))
+            else
             {
-                throw new MirrorException($"schemaString type isn't a struct:  '{schemaString}'");
-            }
-            if (typeData.Fields == null)
-            {
-                throw new MirrorException($"schemaString doesn't contain fields:  '{schemaString}'");
-            }
+                var typeData = (TransactionLogEntry.MetadataData.StructTypeData)typeDataObject;
 
-            var schema = typeData
-                .Fields
-                .Select(f => new ColumnDefinition
+                if (!string.Equals(typeData.Type, "struct", StringComparison.OrdinalIgnoreCase))
                 {
-                    ColumnName = f.Name,
-                    ColumnType = GetKustoType(f.Type.ToLower())
-                })
-                .ToImmutableArray();
+                    throw new MirrorException($"schemaString type isn't a struct:  '{schemaString}'");
+                }
+                if (typeData.Fields == null)
+                {
+                    throw new MirrorException($"schemaString doesn't contain fields:  '{schemaString}'");
+                }
 
-            return schema;
+                var schema = typeData
+                    .Fields
+                    .Select(f => new ColumnDefinition
+                    {
+                        ColumnName = f.Name,
+                        ColumnType = GetKustoType(f.Type.ToLower())
+                    })
+                    .ToImmutableArray();
+
+                return schema;
+            }
         }
 
         private static string GetKustoType(string type)
@@ -328,11 +335,11 @@ namespace MirrorLakeKusto.Storage.DeltaLake
         }
         private static long ExtractRecordCount(string stats)
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var statsData =
-                JsonSerializer.Deserialize<TransactionLogEntry.AddData.StatsData>(
+            var statsDataObject = JsonSerializer.Deserialize(
                     stats,
-                    options);
+                    typeof(TransactionLogEntry.AddData.StatsData),
+                    _transactionLogEntrySerializerContext);
+            var statsData = statsDataObject as TransactionLogEntry.AddData.StatsData;
 
             if (statsData == null)
             {
@@ -532,6 +539,13 @@ namespace MirrorLakeKusto.Storage.DeltaLake
         }
         #endregion
 
+        private readonly static TransactionLogEntrySerializerContext _transactionLogEntrySerializerContext =
+            new TransactionLogEntrySerializerContext(
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
         public MetadataData? Metadata { get; set; }
 
         public AddData? Add { get; set; }
@@ -543,5 +557,12 @@ namespace MirrorLakeKusto.Storage.DeltaLake
         public ProtocolData? Protocol { get; set; }
 
         public CommitInfoData? CommitInfo { get; set; }
+    }
+
+    [JsonSerializable(typeof(TransactionLogEntry))]
+    [JsonSerializable(typeof(TransactionLogEntry.AddData.StatsData))]
+    [JsonSerializable(typeof(TransactionLogEntry.MetadataData.StructTypeData))]
+    internal partial class TransactionLogEntrySerializerContext : JsonSerializerContext
+    {
     }
 }

@@ -6,12 +6,20 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MirrorLakeKusto.Storage
 {
     /// <summary>Leverages https://joshclose.github.io/CsvHelper/.</summary>
     internal class TransactionItem
     {
+        private readonly static TransactionItemSerializerContext _transactionItemSerializerContext =
+            new TransactionItemSerializerContext(
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
         public static string ExternalTableSchema =>
             "KustoDatabaseName:string,KustoTableName:string,StartTxId:int,EndTxId:int,"
             + "Action:string,State:string,MirrorTimestamp:datetime,DeltaTimestamp:datetime,"
@@ -34,8 +42,10 @@ namespace MirrorLakeKusto.Storage
                 }
                 else
                 {
-                    var map =
-                        JsonSerializer.Deserialize<IImmutableDictionary<string, string>>(text);
+                    var map = JsonSerializer.Deserialize(
+                        text,
+                        typeof(IImmutableDictionary<string, string>),
+                        _transactionItemSerializerContext);
 
                     if (map == null)
                     {
@@ -55,8 +65,10 @@ namespace MirrorLakeKusto.Storage
 
                 if (map != null)
                 {
-                    var text =
-                        JsonSerializer.Serialize<IImmutableDictionary<string, string>>(map);
+                    var text = JsonSerializer.Serialize(
+                        map,
+                        typeof(IImmutableDictionary<string, string>),
+                        _transactionItemSerializerContext);
 
                     return text;
                 }
@@ -80,7 +92,10 @@ namespace MirrorLakeKusto.Storage
                 }
                 else
                 {
-                    var array = JsonSerializer.Deserialize<IImmutableList<T>>(text);
+                    var array = JsonSerializer.Deserialize(
+                        text,
+                        typeof(IImmutableList<T>),
+                        _transactionItemSerializerContext);
 
                     if (array == null)
                     {
@@ -100,7 +115,10 @@ namespace MirrorLakeKusto.Storage
 
                 if (list != null)
                 {
-                    var text = JsonSerializer.Serialize<IImmutableList<T>>(list);
+                    var text = JsonSerializer.Serialize(
+                        list,
+                        typeof(IImmutableList<T>),
+                        _transactionItemSerializerContext);
 
                     return text;
                 }
@@ -453,5 +471,10 @@ namespace MirrorLakeKusto.Storage
                 return items.ToImmutableArray();
             }
         }
+    }
+
+    [JsonSerializable(typeof(IImmutableDictionary<string, string>))]
+    internal partial class TransactionItemSerializerContext : JsonSerializerContext
+    {
     }
 }
