@@ -33,7 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\kusto-mirror\kusto-mirror.csproj" />
+    <ProjectReference Include="..\mirror-lake-kusto\mirror-lake-kusto.csproj" />
   </ItemGroup>
 
   <ItemGroup>
