@@ -473,6 +473,8 @@ namespace MirrorLakeKusto.Storage
         }
     }
 
+    [JsonSerializable(typeof(IImmutableList<ColumnDefinition>))]
+    [JsonSerializable(typeof(IImmutableList<string>))]
     [JsonSerializable(typeof(IImmutableDictionary<string, string>))]
     internal partial class TransactionItemSerializerContext : JsonSerializerContext
     {
