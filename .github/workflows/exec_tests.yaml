@@ -16,7 +16,7 @@ jobs:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
       dotnetOs:  linux-x64
       exec:  delta-kusto
-      dbPrefix:  github_linux_
+      dbPrefix:  github_linux
 
     steps:
     - uses: actions/checkout@v2
@@ -47,6 +47,16 @@ jobs:
       shell:  bash
       run: |
         echo "mlkIngestionUri=${{ secrets.mlkIngestionUri }}" >> $GITHUB_ENV
+        echo "mlkTenantId=${{ secrets.mlkTenantId }}" >> $GITHUB_ENV
+        echo "mlkSpId=${{ secrets.mlkSpId }}" >> $GITHUB_ENV
+        echo "mlkSpSecret=${{ secrets.mlkSpSecret }}" >> $GITHUB_ENV
+        echo "mlkSparkPoolName=${{ secrets.mlkSparkPoolName }}" >> $GITHUB_ENV
+        echo "mlkSparkEndpoint=${{ secrets.mlkSparkEndpoint }}" >> $GITHUB_ENV
+        echo "mlkContainerUrl=${{ secrets.mlkContainerUrl }}" >> $GITHUB_ENV
+        echo "mlkSubscriptionId=${{ secrets.mlkSubscriptionId }}" >> $GITHUB_ENV
+        echo "mlkResourceGroup=${{ secrets.mlkResourceGroup }}" >> $GITHUB_ENV
+        echo "mlkCluster=${{ secrets.mlkCluster }}" >> $GITHUB_ENV
+        echo "mlkDbPrefix=$dbPrefix" >> $GITHUB_ENV
     # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-test
     - name: ADX-based integration tests (out-of-proc)
       shell:  bash
