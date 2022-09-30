@@ -38,10 +38,16 @@ jobs:
     - name: Build single file executable
       shell:  bash
       run: |
-        dotnet publish code/mirror-lake-kusto -c release -r $dotnetOs \
-          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-          -p:PublishTrimmed=true -p:PublishReadyToRun=true \
-          -o bin
+      # Exec path
+        if [ ${{ github.event.inputs.outOfProc }} == "true" ]
+        then
+          echo "mlkSingleExecPath=bin/mirror-lake-kusto.exe" >> $GITHUB_ENV
+
+          dotnet publish code/mirror-lake-kusto -c release -r $dotnetOs \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:PublishTrimmed=true -p:PublishReadyToRun=true \
+            -o bin
+        fi
     # Set environment variables
     - name: Set environment variables
       shell:  bash
