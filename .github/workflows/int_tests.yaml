@@ -15,7 +15,7 @@ jobs:
     env:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
       dotnetOs:  linux-x64
-      exec:  delta-kusto
+      exec:  mirror-lake-kusto
       dbPrefix:  github_linux
 
     steps:
@@ -40,13 +40,17 @@ jobs:
       run: |
         if [ ${{ github.event.inputs.outOfProc }} == "true" ]
         then
-          echo "mlkSingleExecPath=bin/mirror-lake-kusto.exe" >> $GITHUB_ENV
+          execPath="$(pwd)/bin/$exec"
+          echo "mlkSingleExecPath=$execPath" >> $GITHUB_ENV
 
           dotnet publish code/mirror-lake-kusto -c release -r $dotnetOs \
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:PublishTrimmed=true -p:PublishReadyToRun=true \
             -o bin
         fi
+    - name: List
+      shell:  bash
+      run: ls -l bin
     # Set environment variables
     - name: Set environment variables
       shell:  bash
