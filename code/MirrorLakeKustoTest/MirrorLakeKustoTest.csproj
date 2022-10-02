@@ -12,7 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Simple\Scripts\MultiLineOneColumn.py" />
     <None Remove="Simple\Scripts\OneLineOneColumn.py" />
+    <EmbeddedResource Include="Simple\Scripts\MultiLineOneColumn.py" />
     <EmbeddedResource Include="Simple\Scripts\OneLineOneColumn.py" />
   </ItemGroup>
 
