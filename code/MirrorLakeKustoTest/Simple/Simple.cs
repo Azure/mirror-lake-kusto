@@ -38,7 +38,7 @@ namespace MirrorLakeKustoTest.Simple
                 Assert.Equal(10, ids.Count);
                 for (int i = 0; i != 10; ++i)
                 {
-                    Assert.Contains(ids, i);
+                    Assert.Contains((long)i, ids);
                 }
             }
         }
