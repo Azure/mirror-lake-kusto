@@ -83,8 +83,10 @@ namespace MirrorLakeKusto
 
         private async Task ProcessTransactionBatchAsync(long startTxId, CancellationToken ct)
         {
+            var stopwatch = new Stopwatch();
             var logs = _tableStatus.GetBatch(startTxId);
 
+            stopwatch.Start();
             Trace.TraceInformation(
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
                 + $"to {logs.AllItems.First().EndTxId}");
@@ -119,6 +121,7 @@ namespace MirrorLakeKusto
             }
 
             await LoadTransactionBatchAsync(startTxId, mainTable, stagingTable, ct);
+            Trace.WriteLine($"Elapsed time:  {stopwatch.Elapsed}");
         }
 
         private async Task LoadTransactionBatchAsync(
