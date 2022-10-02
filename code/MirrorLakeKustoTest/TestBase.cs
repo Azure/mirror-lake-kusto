@@ -64,6 +64,8 @@ namespace MirrorLakeKustoTest
             public int TestId { get; }
 
             public string SynapseRootFolder => $"/automated-tests/{_testSetId}/{TestId.ToString("D4")}";
+            
+            public string TestDataRootFolder => "/automated-tests-data";
 
             public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
             {
@@ -73,7 +75,9 @@ namespace MirrorLakeKustoTest
             public string GetResource(string resourceName)
             {
                 var rawScript = _getResourceFunc(resourceName);
-                var script = rawScript.Replace("<ROOT>", SynapseRootFolder);
+                var script = rawScript
+                    .Replace("<ROOT>", SynapseRootFolder)
+                    .Replace("<TEST_DATA>", TestDataRootFolder);
 
                 return script;
             }
