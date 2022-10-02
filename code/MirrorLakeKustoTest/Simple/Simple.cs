@@ -42,5 +42,27 @@ namespace MirrorLakeKustoTest.Simple
                 }
             }
         }
+
+        [Fact]
+        public async Task CheckpointTx()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Checkpointed"))
+            {
+                var script = session.GetResource("CheckpointTx.py");
+                var output = await session.ExecuteSparkCodeAsync(script);
+
+                await session.RunMirrorAsync();
+
+                var ids = await session.ExecuteQueryAsync(
+                    "",
+                    r => (long)r["id"]);
+
+                Assert.Equal(11, ids.Count);
+                for (int i = 0; i != 11; ++i)
+                {
+                    Assert.Contains((long)i, ids);
+                }
+            }
+        }
     }
 }
