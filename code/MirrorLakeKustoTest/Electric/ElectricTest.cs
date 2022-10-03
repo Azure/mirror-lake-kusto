@@ -8,9 +8,6 @@ namespace MirrorLakeKustoTest.Electric
 {
     public class ElectricTest : TestBase
     {
-        private const string DATA_FILE_NAME =
-            "Electric_Vehicle_Title_and_Registration_Activity.csv.gz";
-
         [Fact]
         public async Task StraightLoad()
         {
