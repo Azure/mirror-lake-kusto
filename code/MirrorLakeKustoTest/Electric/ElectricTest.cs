@@ -28,6 +28,49 @@ namespace MirrorLakeKustoTest.Electric
         }
 
         [Fact]
+        public async Task StraightLoadOptimizeOneGo()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Electric"))
+            {
+                var script1 = session.GetResource("StraightLoad.py");
+                var script2 = session.GetResource("Optimize.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
+
+                await session.RunMirrorAsync();
+
+                var rowCounts = await session.ExecuteQueryAsync(
+                    "| count",
+                    r => (long)r[0]);
+
+                Assert.Equal(467855, rowCounts.First());
+            }
+        }
+
+        [Fact]
+        public async Task StraightLoadOptimizeTwoShots()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Electric"))
+            {
+                var script1 = session.GetResource("StraightLoad.py");
+                var script2 = session.GetResource("Optimize.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+                
+                await session.RunMirrorAsync();
+                
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
+
+                await session.RunMirrorAsync();
+
+                var rowCounts = await session.ExecuteQueryAsync(
+                    "| count",
+                    r => (long)r[0]);
+
+                Assert.Equal(467855, rowCounts.First());
+            }
+        }
+
+        [Fact]
         public async Task PartitionLoad()
         {
             await using (var session = await GetTestSessionAsync("delta", "Electric"))
