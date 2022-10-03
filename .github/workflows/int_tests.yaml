@@ -48,9 +48,6 @@ jobs:
             -p:PublishTrimmed=true -p:PublishReadyToRun=true \
             -o bin
         fi
-    - name: List
-      shell:  bash
-      run: ls -l bin
     # Set environment variables
     - name: Set environment variables
       shell:  bash
