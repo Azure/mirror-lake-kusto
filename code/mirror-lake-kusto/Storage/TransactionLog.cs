@@ -75,15 +75,17 @@ namespace MirrorLakeKusto.Storage
             {
                 throw new NotImplementedException();
             }
-            if (StagingTable != null || second.StagingTable != null)
+            if (second.StagingTable != null)
             {
                 throw new NotImplementedException();
             }
 
-            var firstAddIndex = Adds
+            var allAdds = Adds.Concat(second.Adds);
+            var allRemoves = Removes.Concat(second.Removes);
+            var addIndex = allAdds
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
-            var secondRemoveIndex = second.Removes
+            var removeIndex = allRemoves
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
             Action<TransactionItem> action = clone =>
@@ -91,20 +93,18 @@ namespace MirrorLakeKusto.Storage
                 clone.StartTxId = Math.Min(StartTxId, second.StartTxId);
                 clone.EndTxId = Math.Max(EndTxId, second.EndTxId);
             };
-            var remainingFirstAdds = Adds
-                .Where(a => !secondRemoveIndex.Contains(a.BlobPath));
-            var remainingSecondRemoves = second.Removes
-                .Where(a => !firstAddIndex.Contains(a.BlobPath));
-            var newAdds = remainingFirstAdds
-                .Concat(second.Adds)
+            var remainingAdds = allAdds
+                .Where(a => !removeIndex.Contains(a.BlobPath));
+            var remainingRemoves = allRemoves
+                .Where(a => !addIndex.Contains(a.BlobPath));
+            var newAdds = remainingAdds
                 .Select(a => a.Clone(c => action(c)));
             var newRemoves = Removes
-                .Concat(remainingSecondRemoves)
                 .Select(a => a.Clone(c => action(c)));
 
             return new TransactionLog(
                 Metadata != null ? Metadata.Clone(action) : null,
-                null,
+                StagingTable != null ? StagingTable.Clone(action) : null,
                 newAdds,
                 newRemoves);
         }
