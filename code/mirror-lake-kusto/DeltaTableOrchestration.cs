@@ -50,7 +50,7 @@ namespace MirrorLakeKusto
             {
                 if (!_tableStatus.IsBatchIncomplete)
                 {
-                    var currentLog = _tableStatus.GetAll();
+                    var currentLog = _tableStatus.GetAllDoneLogs();
                     var newLogs = await _deltaTableGateway.GetNextTransactionLogAsync(
                         currentLog,
                         KustoDatabaseName,

@@ -53,11 +53,12 @@ namespace MirrorLakeKusto.Storage
             return startTxId;
         }
 
-        public TransactionLog? GetAll()
+        public TransactionLog? GetAllDoneLogs()
         {
-            if(_statuses.Any())
+            if (_statuses.Any())
             {
                 var logs = _statuses
+                    .Where(s => s.Action != TransactionItemAction.StagingTable)
                     .GroupBy(s => s.StartTxId)
                     .Select(g => new TransactionLog(g));
                 var all = TransactionLog.Coalesce(logs);
