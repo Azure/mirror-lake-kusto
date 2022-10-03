@@ -13,11 +13,13 @@
 
   <ItemGroup>
     <None Remove="Electric\Electric_Vehicle_Title_and_Registration_Activity.csv.gz" />
+    <None Remove="Electric\Scripts\DeleteWithPartition.py" />
     <None Remove="Electric\Scripts\PartitionLoad.py" />
     <None Remove="Electric\Scripts\StraightLoad.py" />
     <None Remove="Simple\Scripts\CheckpointTx.py" />
     <None Remove="Simple\Scripts\MultiLineOneColumn.py" />
     <None Remove="Simple\Scripts\OneLineOneColumn.py" />
+    <EmbeddedResource Include="Electric\Scripts\DeleteWithPartition.py" />
     <EmbeddedResource Include="Electric\Scripts\PartitionLoad.py" />
     <EmbeddedResource Include="Electric\Scripts\StraightLoad.py" />
     <EmbeddedResource Include="Simple\Scripts\CheckpointTx.py" />

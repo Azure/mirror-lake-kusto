@@ -80,10 +80,10 @@ namespace MirrorLakeKusto.Storage
                 throw new NotImplementedException();
             }
 
-            var addIndex = Adds
+            var firstAddIndex = Adds
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
-            var removeIndex = Removes
+            var secondRemoveIndex = second.Removes
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
             Action<TransactionItem> action = clone =>
@@ -91,18 +91,22 @@ namespace MirrorLakeKusto.Storage
                 clone.StartTxId = Math.Min(StartTxId, second.StartTxId);
                 clone.EndTxId = Math.Max(EndTxId, second.EndTxId);
             };
-            var remainingAdds = Adds
-                .Where(a => !removeIndex.Contains(a.BlobPath))
+            var remainingFirstAdds = Adds
+                .Where(a => !secondRemoveIndex.Contains(a.BlobPath));
+            var remainingSecondRemoves = second.Removes
+                .Where(a => !firstAddIndex.Contains(a.BlobPath));
+            var newAdds = remainingFirstAdds
+                .Concat(second.Adds)
                 .Select(a => a.Clone(c => action(c)));
-            var remainingRemoves = Removes
-                .Where(a => !addIndex.Contains(a.BlobPath))
+            var newRemoves = Removes
+                .Concat(remainingSecondRemoves)
                 .Select(a => a.Clone(c => action(c)));
 
             return new TransactionLog(
                 Metadata != null ? Metadata.Clone(action) : null,
                 null,
-                remainingAdds,
-                remainingRemoves);
+                newAdds,
+                newRemoves);
         }
 
         public TransactionLog Delta(TransactionLog currentLog)

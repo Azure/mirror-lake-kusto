@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Azure.Management.Kusto.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -41,6 +42,49 @@ namespace MirrorLakeKustoTest.Electric
                     r => (long)r[0]);
 
                 Assert.Equal(3, rowCounts.First());
+            }
+        }
+
+        [Fact]
+        public async Task DeleteWithPartitionOneGo()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Electric"))
+            {
+                var script1 = session.GetResource("PartitionLoad.py");
+                var script2 = session.GetResource("DeleteWithPartition.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
+                
+                await session.RunMirrorAsync();
+
+                var rowCounts = await session.ExecuteQueryAsync(
+                    "| count",
+                    r => (long)r[0]);
+
+                Assert.Equal(467145, rowCounts.First());
+            }
+        }
+
+        [Fact]
+        public async Task DeleteWithPartitionTwoShots()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Electric"))
+            {
+                var script1 = session.GetResource("PartitionLoad.py");
+                var script2 = session.GetResource("DeleteWithPartition.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+
+                await session.RunMirrorAsync();
+
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
+                
+                await session.RunMirrorAsync();
+                
+                var rowCounts = await session.ExecuteQueryAsync(
+                    "| count",
+                    r => (long)r[0]);
+
+                Assert.Equal(467145, rowCounts.First());
             }
         }
     }
