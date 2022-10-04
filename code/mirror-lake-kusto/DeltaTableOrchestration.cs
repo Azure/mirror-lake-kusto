@@ -59,7 +59,6 @@ namespace MirrorLakeKusto
 
                     if (newLogs != null)
                     {   //  Persists the logs and loop again to process them
-                        Trace.WriteLine($"Mirroring logs {newLogs.StartTxId} to {newLogs.EndTxId}");
                         await PersistNewLogsAsync(newLogs, ct);
                     }
                     else if (_continuousRun)
@@ -87,7 +86,7 @@ namespace MirrorLakeKusto
             var logs = _tableStatus.GetBatch(startTxId);
 
             stopwatch.Start();
-            Trace.TraceInformation(
+            Trace.WriteLine(
                 $"Processing Transaction Batch {logs.AllItems.First().StartTxId} "
                 + $"to {logs.AllItems.First().EndTxId}");
 
