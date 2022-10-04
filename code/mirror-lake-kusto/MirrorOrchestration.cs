@@ -83,32 +83,27 @@ namespace MirrorLakeKusto
         private static TokenCredential CreateNonSasStorageCredentials(
             string clusterIngestionConnectionString)
         {
-            var builder = new KustoConnectionStringBuilder(clusterIngestionConnectionString);
-
-            //  Enforce federated security
-            builder.FederatedSecurity = true;
-            builder.DstsFederatedSecurity = false;
-
-            if (string.IsNullOrWhiteSpace(builder.ApplicationClientId))
-            {
+            if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
+            {   //  Default, if no credentials are provided
                 return new AzureCliCredential();
-            }
-            else if (string.IsNullOrWhiteSpace(builder.Authority))
-            {
-                throw new MirrorException(
-                    "Authority / tennant ID must be specified in "
-                    + "connection string when client ID is specified");
-            }
-            else if (!string.IsNullOrWhiteSpace(builder.ApplicationKey))
-            {
-                return new ClientSecretCredential(
-                    builder.Authority,
-                    builder.ApplicationClientId,
-                    builder.ApplicationKey);
             }
             else
             {
-                throw new MirrorException("Connection string unsupported");
+                var builder = new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+
+                if (!string.IsNullOrWhiteSpace(builder.Authority)
+                    && !string.IsNullOrWhiteSpace(builder.ApplicationClientId)
+                    && !string.IsNullOrWhiteSpace(builder.ApplicationKey))
+                {
+                    return new ClientSecretCredential(
+                        builder.Authority,
+                        builder.ApplicationClientId,
+                        builder.ApplicationKey);
+                }
+                else
+                {
+                    throw new MirrorException("Connection string unsupported");
+                }
             }
         }
         #endregion
