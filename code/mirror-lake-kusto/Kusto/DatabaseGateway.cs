@@ -73,7 +73,7 @@ with(format='csv', ignoreFirstRecord=true)
 | order by KustoDatabaseName asc, KustoTableName asc, StartTxId asc, Action asc, BlobPath asc
 | project {columnListText}
 }}";
-            var commandText = $@".execute database script <|
+            var commandText = $@".execute database script with (ContinueOnErrors=false, ThrowOnErrors=true)<|
 {createStatusViewFunction}
 
 {createStatusLatestViewFunction}";
