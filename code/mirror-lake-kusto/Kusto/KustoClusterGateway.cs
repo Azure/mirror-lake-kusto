@@ -32,7 +32,7 @@ namespace MirrorLakeKusto.Kusto
 
             if(Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
             {   //  Enforce Az CLI authentication if user simply provides cluster ingestion URI
-                ingestionStringBuilder = ingestionStringBuilder.WithAadAzCliAuthentication(true);
+                ingestionStringBuilder = ingestionStringBuilder.WithAadAzCliAuthentication(false);
             }
 
             var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
