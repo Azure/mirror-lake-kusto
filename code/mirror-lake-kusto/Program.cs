@@ -79,10 +79,10 @@ namespace MirrorLakeKusto
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
 
-            Console.WriteLine();
-            Console.WriteLine($"kusto-mirror {AssemblyVersion}");
-            Console.WriteLine($"Session:  {sessionId}");
-            Console.WriteLine();
+            Trace.WriteLine(string.Empty);
+            Trace.WriteLine($"mirror-lake-kusto {AssemblyVersion}");
+            Trace.WriteLine($"Session:  {sessionId}");
+            Trace.WriteLine(string.Empty);
 
             //  Use CommandLineParser NuGet package to parse command line
             //  See https://github.com/commandlineparser/commandline
@@ -240,7 +240,7 @@ namespace MirrorLakeKusto
             {
                 Filter = new MultiFilter(
                     new EventTypeFilter(isVerbose ? SourceLevels.Verbose : SourceLevels.Information),
-                    new SourceFilter("kusto-mirror"))
+                    new SourceFilter("mirror-lake-kusto"))
             };
             var errorListener = new TextWriterTraceListener(Console.Error)
             {
