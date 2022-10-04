@@ -168,7 +168,7 @@ namespace MirrorLakeKusto
             stagingTable.StagingTableName =
                 CreateStagingTableName(stagingTable.StartTxId);
 
-            Trace.TraceInformation(
+            Trace.WriteLine(
                 $"Resetting transaction batch {template.StartTxId} to {template.EndTxId}");
 
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
