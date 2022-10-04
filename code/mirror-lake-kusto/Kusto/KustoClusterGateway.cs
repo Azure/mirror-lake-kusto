@@ -30,10 +30,10 @@ namespace MirrorLakeKusto.Kusto
             var ingestionStringBuilder =
                 new KustoConnectionStringBuilder(clusterIngestionConnectionString);
 
-            //  Enforce AAD authentication
-            //  Especially useful if user simply provides cluster ingestion URI
-            ingestionStringBuilder.FederatedSecurity = true;
-            ingestionStringBuilder.DstsFederatedSecurity = false;
+            if(Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
+            {   //  Enforce Az CLI authentication if user simply provides cluster ingestion URI
+                ingestionStringBuilder = ingestionStringBuilder.WithAadAzCliAuthentication();
+            }
 
             var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
 
