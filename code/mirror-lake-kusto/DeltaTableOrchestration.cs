@@ -360,25 +360,11 @@ print ExtentId=dynamic([{extentIdsText}])
             }
             else
             {
-                try
-                {
-                    await _databaseGateway.ExecuteCommandAsync(
-                        $".show table {stagingTableSchema.Name}",
-                        r => 0, ct);
+                var counts = await _databaseGateway.ExecuteCommandAsync(
+                    $".show tables | where TableName == '{stagingTableSchema.Name}' | count",
+                    r => (long)r[0], ct);
 
-                    return true;
-                }
-                catch (MirrorException ex)
-                {
-                    if (ex.InnerException is EntityNotFoundException)
-                    {
-                        return false;
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
+                return counts.First() == 1;
             }
         }
 
