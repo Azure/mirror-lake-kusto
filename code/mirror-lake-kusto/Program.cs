@@ -105,12 +105,14 @@ namespace MirrorLakeKusto
             }
             catch (MirrorException ex)
             {
+                Trace.TraceError("Encountered error");
                 DisplayMirrorException(ex);
 
                 return 1;
             }
             catch (Exception ex)
             {
+                Trace.TraceError("Encountered error");
                 DisplayGenericException(ex);
 
                 return 1;
