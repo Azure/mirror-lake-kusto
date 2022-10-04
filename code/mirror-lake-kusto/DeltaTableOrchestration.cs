@@ -108,7 +108,9 @@ namespace MirrorLakeKusto
                 {
                     if (notDone.First().Action != TransactionItemAction.StagingTable)
                     {
-                        throw new MirrorException("Should only have the staging table remain");
+                        throw new MirrorException(
+                            "Should only have the staging table remain, instead:  "
+                            + $"{notDone.First().Action}");
                     }
                     await _tableStatus.PersistNewItemsAsync(
                         new[] { logs.StagingTable!.UpdateState(TransactionItemState.Done) },
