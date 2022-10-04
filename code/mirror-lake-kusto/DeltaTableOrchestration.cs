@@ -102,7 +102,8 @@ namespace MirrorLakeKusto
 
             if (!isStaging)
             {
-                var notDone = logs.AllItems.Where(l => l.State != TransactionItemState.Done);
+                var notDone = logs.AllItems
+                    .Where(l => l.State != TransactionItemState.Done);
 
                 if (notDone.Count() == 1)
                 {
@@ -110,7 +111,7 @@ namespace MirrorLakeKusto
                     {
                         throw new MirrorException(
                             "Should only have the staging table remain, instead:  "
-                            + $"{notDone.First().Action}");
+                            + $"{notDone.First().Action} / {notDone.First().State}");
                     }
                     await _tableStatus.PersistNewItemsAsync(
                         new[] { logs.StagingTable!.UpdateState(TransactionItemState.Done) },
