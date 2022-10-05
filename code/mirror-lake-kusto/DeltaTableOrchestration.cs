@@ -144,8 +144,14 @@ namespace MirrorLakeKusto
                 }
                 await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
             }
-            await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
-            await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
+            await BlobStagingOrchestration.EnsureAllStagedAsync(
+                _databaseGateway,
+                stagingTable,
+                _tableStatus,
+                logs.StartTxId,
+                ct);
+            //await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
+            //await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
             await EnsureAllLoadedAsync(mainTable, stagingTable, logs.StartTxId, ct);
             await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
             Trace.TraceInformation(
