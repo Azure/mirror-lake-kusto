@@ -485,8 +485,6 @@ print ExtentId=dynamic([{extentIdsText}])
                 IngestionMappings = ingestionMappings,
                 IngestionMappingKind = IngestionMappingKind.Parquet
             };
-            properties.IngestIfNotExists = new[] { item.BlobPath };
-            properties.IngestByTags = new[] { item.BlobPath };
 
             await _databaseGateway.QueueIngestionAsync(
                 new Uri(fullBlobath),
