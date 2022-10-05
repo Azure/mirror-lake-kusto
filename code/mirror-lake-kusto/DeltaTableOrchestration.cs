@@ -143,7 +143,6 @@ namespace MirrorLakeKusto
                     throw new InvalidOperationException("Transaction 0 should have meta data");
                 }
                 await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
-                logs = _tableStatus.Refresh(logs);
             }
             await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
             await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);

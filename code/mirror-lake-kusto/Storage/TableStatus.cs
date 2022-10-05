@@ -100,25 +100,6 @@ namespace MirrorLakeKusto.Storage
             return new TableDefinition(TableName, schemaItem.Schema, schemaItem.PartitionColumns);
         }
 
-        public TransactionLog Refresh(TransactionLog log)
-        {
-            var startTxId = log.StartTxId;
-            var endTxId = log.EndTxId;
-            var batchItems = _statuses
-                .Where(s => s.StartTxId == startTxId);
-            var logs = new TransactionLog(batchItems);
-
-            foreach (var item in logs.AllItems)
-            {
-                if (item.EndTxId != endTxId)
-                {
-                    throw new InvalidOperationException("Invalid End transaction ID");
-                }
-            }
-
-            return new TransactionLog(batchItems);
-        }
-
         public async Task PersistNewItemsAsync(
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
