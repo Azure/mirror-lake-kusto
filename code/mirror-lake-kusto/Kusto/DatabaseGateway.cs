@@ -9,8 +9,8 @@ namespace MirrorLakeKusto.Kusto
 {
     public class DatabaseGateway
     {
-        private const string STATUS_VIEW_NAME = "KM_DeltaStatus";
-        private const string STATUS_LATEST_VIEW_NAME = "KM_DeltaStatusLatest";
+        private const string STATUS_VIEW_NAME = "MLK_DeltaStatusRaw";
+        private const string STATUS_LATEST_VIEW_NAME = "MLK_DeltaStatus";
 
         private readonly KustoClusterGateway _clusterGateway;
 
