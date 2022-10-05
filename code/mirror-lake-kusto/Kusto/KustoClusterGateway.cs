@@ -17,7 +17,6 @@ namespace MirrorLakeKusto.Kusto
         private readonly ICslQueryProvider _queryProvider;
         private readonly ICslAdminProvider _commandProvider;
         private readonly IKustoQueuedIngestClient _ingestionProvider;
-        private readonly Uri _clusterQueryUri;
         private readonly string _application;
         private readonly IImmutableList<KeyValuePair<string, object>>? _requestOptions;
 
@@ -29,37 +28,36 @@ namespace MirrorLakeKusto.Kusto
         {
             var ingestionStringBuilder =
                 new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+            var queryStringBuilder =
+                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
 
-            if(Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
+            if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
             {   //  Enforce Az CLI authentication if user simply provides cluster ingestion URI
                 ingestionStringBuilder = ingestionStringBuilder.WithAadAzCliAuthentication(false);
+                queryStringBuilder = queryStringBuilder.WithAadAzCliAuthentication(false);
             }
 
             var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
 
+            queryStringBuilder.DataSource = clusterQueryUri.ToString();
+
             return new KustoClusterGateway(
                 ingestionStringBuilder,
-                clusterQueryUri,
+                queryStringBuilder,
                 version,
                 requestDescription);
         }
 
         private KustoClusterGateway(
             KustoConnectionStringBuilder ingestionStringBuilder,
-            Uri clusterQueryUri,
+            KustoConnectionStringBuilder queryStringBuilder,
             string version,
             string? requestDescription = null)
         {
-            var queryStringBuilder = new KustoConnectionStringBuilder(ingestionStringBuilder);
-
-            //  Override query data source but keep the rest of connection string identical
-            queryStringBuilder.DataSource = clusterQueryUri.ToString();
-
             _queryProvider = KustoClientFactory.CreateCslQueryProvider(queryStringBuilder);
             _commandProvider = KustoClientFactory.CreateCslCmAdminProvider(queryStringBuilder);
             _ingestionProvider = KustoIngestFactory.CreateQueuedIngestClient(
                 ingestionStringBuilder);
-            _clusterQueryUri = clusterQueryUri;
             if (requestDescription != null)
             {
                 _application = $"Kusto-Mirror;{version}";
