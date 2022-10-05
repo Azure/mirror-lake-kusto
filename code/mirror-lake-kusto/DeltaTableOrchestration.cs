@@ -123,7 +123,9 @@ namespace MirrorLakeKusto
             }
 
             await LoadTransactionBatchAsync(startTxId, mainTable, stagingTable, ct);
-            Trace.WriteLine($"Elapsed time:  {stopwatch.Elapsed}");
+            Trace.WriteLine(
+                $"Elapsed time for transaction batch {logs.AllItems.First().StartTxId}"
+                + "to {logs.AllItems.First().EndTxId}:  {stopwatch.Elapsed}");
         }
 
         private async Task LoadTransactionBatchAsync(
@@ -265,7 +267,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
             }
 
-            Trace.TraceInformation($"Loading extents in main table");
+            Trace.WriteLine($"Loading extents in main table");
             await LoadExtentsAsync(stagingTable, ct);
             await removeBlobPathsTask;
             await DropTagsAsync(startTxId, ct);
@@ -430,7 +432,7 @@ print ExtentId=dynamic([{extentIdsText}])
 
             if (toBeAdded.Any())
             {
-                Trace.TraceInformation($"Queuing {toBeAdded.Count()} blobs for ingestion");
+                Trace.WriteLine($"Queuing {toBeAdded.Count()} blobs for ingestion");
 
                 var toBeQueued = toBeAdded
                     .Where(a => a.RecordCount > 0);
