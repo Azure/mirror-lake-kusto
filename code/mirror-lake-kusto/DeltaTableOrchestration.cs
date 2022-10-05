@@ -377,6 +377,13 @@ print ExtentId=dynamic([{extentIdsText}])
                 ", ",
                 stagingTableSchema.Columns.Select(c => $"['{c.ColumnName}']:{c.ColumnType}"));
             var createTableText = $".create-merge table {stagingTableSchema.Name} ({schemaText})";
+            var batchingPolicyText = @$".alter table {stagingTableSchema.Name} policy ingestionbatching
+```
+{{
+    ""MaximumBatchingTimeSpan"" : ""00:00:10""
+}}
+```
+";
             //  Disable merge policy not to run after phantom extents
             var mergePolicyText = @$".alter table {stagingTableSchema.Name} policy merge
 ```
@@ -408,6 +415,8 @@ print ExtentId=dynamic([{extentIdsText}])
             var commandText = @$"
 .execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
 {createTableText}
+
+{batchingPolicyText}
 
 {retentionPolicyText}
 
@@ -479,6 +488,7 @@ print ExtentId=dynamic([{extentIdsText}])
                 item.BlobPath);
             var properties = _databaseGateway.GetIngestionProperties(stagingTable.Name);
 
+            properties.FlushImmediately = true;
             properties.Format = DataSourceFormat.parquet;
             properties.IngestionMapping = new IngestionMapping()
             {
