@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
 
-namespace MirrorLakeKusto
+namespace MirrorLakeKusto.Orchestrations
 {
     internal class BlobStagingOrchestration
     {
