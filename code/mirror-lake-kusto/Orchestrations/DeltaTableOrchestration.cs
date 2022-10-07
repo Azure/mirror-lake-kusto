@@ -151,8 +151,6 @@ namespace MirrorLakeKusto.Orchestrations
                 logs.StartTxId,
                 _deltaTableGateway.DeltaTableStorageUrl,
                 ct);
-            //await EnsureAllQueuedAsync(stagingTable, logs.StartTxId, ct);
-            //await EnsureAllStagedAsync(stagingTable, logs.StartTxId, ct);
             await EnsureAllLoadedAsync(mainTable, stagingTable, logs.StartTxId, ct);
             await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
             Trace.TraceInformation(
@@ -180,79 +178,6 @@ namespace MirrorLakeKusto.Orchestrations
 
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
             await ProcessTransactionBatchAsync(startTxId, ct);
-        }
-
-        private async Task EnsureAllStagedAsync(
-            TableDefinition stagingTable,
-            long startTxId,
-            CancellationToken ct)
-        {
-            var logs = _tableStatus.GetBatch(startTxId);
-            var queued = logs.Adds
-                .Where(a => a.State == TransactionItemState.QueuedForIngestion);
-
-            if (queued.Any())
-            {
-                var itemMap = logs
-                    .Adds
-                    .ToImmutableDictionary(a => a.BlobPath!);
-                //  Limit output, not to have a too heavy result set
-                var showTableText = $@".show table {stagingTable.Name} extents
-where tags !has '{STAGED_TAG}' and tags contains '{INGEST_BY_PREFIX}'
-| project tostring(ExtentId), Tags
-| take {EXTENT_PROBE_BATCH_SIZE}";
-                var extents = await _databaseGateway.ExecuteCommandAsync(
-                    showTableText,
-                    d => new
-                    {
-                        ExtentId = (string)d["ExtentId"],
-                        BlobPath = ((string)d["Tags"])
-                        .Split(' ')
-                        .Where(t => t.StartsWith(INGEST_BY_PREFIX))
-                        .Select(t => t.Substring(INGEST_BY_PREFIX.Length))
-                        .First()
-                    },
-                    ct);
-                var extentsToStage = extents
-                    .Where(e => itemMap.ContainsKey(e.BlobPath))
-                    .ToImmutableArray();
-
-                if (extentsToStage.Any())
-                {
-                    var itemsToUpdate = extentsToStage
-                        .Select(e => new { Item = itemMap[e.BlobPath], e.ExtentId })
-                        .Where(i => i.Item.State == TransactionItemState.QueuedForIngestion)
-                        .Select(i => new
-                        {
-                            Item = i.Item.UpdateState(TransactionItemState.Staged),
-                            i.ExtentId
-                        })
-                        .ToImmutableArray();
-
-                    if (itemsToUpdate.Any())
-                    {
-                        //  We first persist the transaction items:
-                        //  possible to have unmarked extents
-                        await _tableStatus.PersistNewItemsAsync(
-                            itemsToUpdate.Select(i => i.Item),
-                            ct);
-                    }
-
-                    var extentIdsText =
-                        string.Join(", ", extentsToStage.Select(e => $"'{e.ExtentId}'"));
-                    var tagExtentsCommandText = $@".alter-merge extent tags ('{STAGED_TAG}') <|
-print ExtentId=dynamic([{extentIdsText}])
-| mv-expand ExtentId to typeof(string)";
-
-                    await _databaseGateway.ExecuteCommandAsync(tagExtentsCommandText, r => 0, ct);
-                }
-                else
-                {
-                    await Task.Delay(BETWEEN_EXTENT_PROBE_DELAY, ct);
-                }
-                //  Recursive
-                await EnsureAllStagedAsync(stagingTable, startTxId, ct);
-            }
         }
 
         private async Task EnsureAllLoadedAsync(
@@ -457,79 +382,6 @@ print ExtentId=dynamic([{extentIdsText}])
 {restrictedViewPolicyText}";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
-        }
-
-        private async Task EnsureAllQueuedAsync(
-            TableDefinition stagingTable,
-            long startTxId,
-            CancellationToken ct)
-        {
-            var logs = _tableStatus.GetBatch(startTxId);
-            var toBeAdded = logs
-                .Adds
-                .Where(i => i.State == TransactionItemState.Initial);
-
-            if (toBeAdded.Any())
-            {
-                Trace.WriteLine($"Queuing {toBeAdded.Count()} blobs for ingestion");
-
-                var toBeQueued = toBeAdded
-                    .Where(a => a.RecordCount > 0);
-                var toDone = toBeAdded
-                    .Where(a => a.RecordCount == 0);
-                var queueTasks = toBeQueued
-                    .Select(async item =>
-                    {
-                        if (item.PartitionValues == null)
-                        {
-                            throw new ArgumentNullException(nameof(item.PartitionValues));
-                        }
-
-                        var ingestionMappings = stagingTable.CreateIngestionMappings(
-                            item.BlobPath!,
-                            item.PartitionValues!);
-
-                        await QueueItemAsync(stagingTable, item, ingestionMappings, ct);
-                    })
-                    .ToImmutableArray();
-                var queuedItems = toBeAdded
-                    .Select(item => item.UpdateState(TransactionItemState.QueuedForIngestion));
-                var doneItems = toDone
-                    .Select(item => item.UpdateState(TransactionItemState.Done));
-
-                await Task.WhenAll(queueTasks);
-                await _tableStatus.PersistNewItemsAsync(queuedItems.Concat(doneItems), ct);
-            }
-        }
-
-        private async Task QueueItemAsync(
-            TableDefinition stagingTable,
-            TransactionItem item,
-            IEnumerable<ColumnMapping> ingestionMappings,
-            CancellationToken ct)
-        {
-            if (item.BlobPath == null)
-            {
-                throw new InvalidOperationException(
-                    $"{nameof(item.BlobPath)} shouldn't be null here");
-            }
-            var fullBlobath = Path.Combine(
-                $"{_deltaTableGateway.DeltaTableStorageUrl}/",
-                item.BlobPath);
-            var properties = _databaseGateway.GetIngestionProperties(stagingTable.Name);
-
-            properties.FlushImmediately = true;
-            properties.Format = DataSourceFormat.parquet;
-            properties.IngestionMapping = new IngestionMapping()
-            {
-                IngestionMappings = ingestionMappings,
-                IngestionMappingKind = IngestionMappingKind.Parquet
-            };
-
-            await _databaseGateway.QueueIngestionAsync(
-                new Uri(fullBlobath),
-                properties,
-                ct);
         }
 
         private async Task EnsureLandingTableSchemaAsync(
