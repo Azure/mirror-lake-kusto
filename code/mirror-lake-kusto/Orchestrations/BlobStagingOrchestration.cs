@@ -119,8 +119,7 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 if (_itemsBatchToIngest.TryDequeue(out var items))
                 {
-                    var urlList = items
-                        .Select(i => Path.Combine($"{_deltaTableStorageUrl}/", i.BlobPath!));
+                    var urlList = items.Select(i => i.BlobPath!);
                     var urlListText = string.Join(
                         ", " + Environment.NewLine,
                         urlList.Select(u => $"'{u};impersonate'"));
@@ -147,9 +146,9 @@ namespace MirrorLakeKusto.Orchestrations
                         ct);
                     var extentIds = results.Select(r => r.ExtentId).ToImmutableArray();
                     var newItems = items
-                        .Select(i => i.UpdateState(
-                            TransactionItemState.Staged,
-                            i => i.StagingExtentIds = extentIds));
+                        .Select(i => i
+                        .UpdateState(TransactionItemState.Staged)
+                        .Clone(i => i.InternalState.AddInternalState!.StagingExtentIds = extentIds));
 
                     //  Queue updated items to persist
                     foreach (var newItem in newItems)

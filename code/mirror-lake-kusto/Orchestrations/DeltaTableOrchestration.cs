@@ -93,7 +93,9 @@ namespace MirrorLakeKusto.Orchestrations
             var mainTable = _tableStatus
                 .GetTableDefinition(startTxId)
                 .WithTrackingColumns();
-            var stagingTable = mainTable.RenameTable(logs.StagingTable!.StagingTableName!);
+            var stagingTableName =
+                logs.StagingTable!.InternalState.StagingTableInternalState!.StagingTableName!;
+            var stagingTable = mainTable.RenameTable(stagingTableName);
             var isStaging = await EnsureStagingTableAsync(
                 stagingTable,
                 logs.StagingTable!,
@@ -159,7 +161,7 @@ namespace MirrorLakeKusto.Orchestrations
                 _deltaTableGateway.DeltaTableStorageUrl,
                 ct);
             await EnsureAllLoadedAsync(mainTable, stagingTable, logs.StartTxId, ct);
-            await DropStagingTableAsync(logs.StagingTable!, logs.StartTxId, ct);
+            await DropStagingTableAsync(logs.StagingTable!, ct);
             Trace.TraceInformation(
                 $"Table '{_tableStatus.TableName}', "
                 + $"tx {logs.StartTxId} to {logs.EndTxId} processed");
@@ -170,15 +172,14 @@ namespace MirrorLakeKusto.Orchestrations
             CancellationToken ct)
         {
             var log = _tableStatus.GetBatch(startTxId);
-            var stagingTable =
-                log.StagingTable!.UpdateState(TransactionItemState.Initial);
+            var stagingTableName = CreateStagingTableName(log.StartTxId);
+            var stagingTable = log.StagingTable!
+                .UpdateState(TransactionItemState.Initial)
+                .Clone(s => s.InternalState.StagingTableInternalState!.StagingTableName = stagingTableName);
             var resetAdds = log.Adds
                 .Where(a => a.State != TransactionItemState.Initial)
                 .Select(a => a.UpdateState(TransactionItemState.Initial));
             var template = log.AllItems.First();
-
-            stagingTable.StagingTableName =
-                CreateStagingTableName(stagingTable.StartTxId);
 
             Trace.WriteLine(
                 $"Resetting transaction batch {template.StartTxId} to {template.EndTxId}");
@@ -253,7 +254,7 @@ namespace MirrorLakeKusto.Orchestrations
 
         private async Task RemoveBlobPathsAsync(
             TableDefinition mainTable,
-            IEnumerable<string> blobPathToRemove,
+            IEnumerable<Uri> blobPathToRemove,
             CancellationToken ct)
         {
             if (blobPathToRemove.Any())
@@ -271,10 +272,11 @@ namespace MirrorLakeKusto.Orchestrations
 
         private async Task DropStagingTableAsync(
             TransactionItem stagingTable,
-            long startTxId,
             CancellationToken ct)
         {
-            var commandText = $".drop table {stagingTable.StagingTableName} ifexists";
+            var stagingTableName =
+                stagingTable.InternalState.StagingTableInternalState!.StagingTableName;
+            var commandText = $".drop table {stagingTableName} ifexists";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
 
@@ -423,7 +425,7 @@ namespace MirrorLakeKusto.Orchestrations
                 templateItem.StartTxId,
                 templateItem.EndTxId,
                 TransactionItemState.Initial,
-                stagingTableName);
+                new StagingTableInternalState { StagingTableName = stagingTableName });
             var allItems = newLogs.AllItems.Append(stagingTableItem);
 
             await _tableStatus.PersistNewItemsAsync(allItems, ct);

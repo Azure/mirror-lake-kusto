@@ -20,7 +20,7 @@ namespace MirrorLakeKusto.Storage
                     WriteIndented = true
                 });
 
-        public static string ExternalTableSchema => "KustoDatabaseName:string, KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, StagingTableName:string, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, StagingExtentIds:dynamic, DeltaTableId:guid, DeltaTableName:string, PartitionColumns:dynamic, Schema:string";
+        public static string ExternalTableSchema => "KustoDatabaseName:string, KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, DeltaTableId:guid, DeltaTableName:string, PartitionColumns:string, Schema:string, StagingTableName:string";
 
         #region Inner types
         private class DictionaryConverter : DefaultTypeConverter
@@ -145,15 +145,13 @@ namespace MirrorLakeKusto.Storage
             TransactionItemAction action,
             TransactionItemState state,
             DateTime? deltaTimestamp,
-            string? stagingTableName,
-            string? blobPath,
+            Uri? blobPath,
             IImmutableDictionary<string, string>? partitionValues,
             long? size,
             long? recordCount,
-            Guid? deltaTableId,
-            string? deltaTableName,
             IImmutableList<string>? partitionColumns,
-            IImmutableList<ColumnDefinition>? schema)
+            IImmutableList<ColumnDefinition>? schema,
+            InternalState internalState)
         {
             KustoDatabaseName = kustoDatabaseName;
             KustoTableName = kustoTableName;
@@ -162,16 +160,14 @@ namespace MirrorLakeKusto.Storage
             Action = action;
             State = state;
             DeltaTimestamp = deltaTimestamp;
-            StagingTableName = stagingTableName;
             MirrorTimestamp = DateTime.UtcNow;
             BlobPath = blobPath;
             PartitionValues = partitionValues;
             Size = size;
             RecordCount = recordCount;
-            DeltaTableId = deltaTableId;
-            DeltaTableName = deltaTableName;
             PartitionColumns = partitionColumns;
             Schema = schema;
+            InternalState = internalState;
         }
 
         public static TransactionItem CreateStagingTableItem(
@@ -180,7 +176,7 @@ namespace MirrorLakeKusto.Storage
             long startTxId,
             long endTxId,
             TransactionItemState state,
-            string stagingTableName)
+            StagingTableInternalState stagingTableInternalState)
         {
             return new TransactionItem(
                 kustoDatabaseName,
@@ -190,15 +186,13 @@ namespace MirrorLakeKusto.Storage
                 TransactionItemAction.StagingTable,
                 state,
                 null,
-                stagingTableName,
                 null,
                 null,
                 null,
                 null,
                 null,
                 null,
-                null,
-                null);
+                new InternalState { StagingTableInternalState = stagingTableInternalState });
         }
 
         public static TransactionItem CreateAddItem(
@@ -208,7 +202,7 @@ namespace MirrorLakeKusto.Storage
             long endTxId,
             TransactionItemState state,
             DateTime deltaTimestamp,
-            string blobPath,
+            Uri blobPath,
             IImmutableDictionary<string, string> partitionValues,
             long size,
             long recordCount)
@@ -221,15 +215,13 @@ namespace MirrorLakeKusto.Storage
                 TransactionItemAction.Add,
                 state,
                 deltaTimestamp,
-                null,
                 blobPath,
                 partitionValues,
                 size,
                 recordCount,
                 null,
                 null,
-                null,
-                null);
+                new InternalState { AddInternalState = new AddInternalState() });
         }
 
         public static TransactionItem CreateRemoveItem(
@@ -239,7 +231,7 @@ namespace MirrorLakeKusto.Storage
             long endTxId,
             TransactionItemState state,
             DateTime deltaTimestamp,
-            string blobPath,
+            Uri blobPath,
             //  Synapse Spark sometimes omit those on remove
             IImmutableDictionary<string, string>? partitionValues,
             long size)
@@ -252,15 +244,13 @@ namespace MirrorLakeKusto.Storage
                 TransactionItemAction.Remove,
                 state,
                 deltaTimestamp,
-                null,
                 blobPath,
                 partitionValues,
                 size,
                 null,
                 null,
                 null,
-                null,
-                null);
+                new InternalState { });
         }
 
         public static TransactionItem CreateSchemaItem(
@@ -270,10 +260,9 @@ namespace MirrorLakeKusto.Storage
             long endTxId,
             TransactionItemState state,
             DateTime deltaTimestamp,
-            Guid deltaTableId,
-            string deltaTableName,
             IImmutableList<string> partitionColumns,
-            IImmutableList<ColumnDefinition>? schema)
+            IImmutableList<ColumnDefinition>? schema,
+            SchemaInternalState schemaInternalState)
         {
             return new TransactionItem(
                 kustoDatabaseName,
@@ -287,11 +276,9 @@ namespace MirrorLakeKusto.Storage
                 null,
                 null,
                 null,
-                null,
-                deltaTableId,
-                deltaTableName,
                 partitionColumns,
-                schema);
+                schema,
+                new InternalState { SchemaInternalState = schemaInternalState });
         }
         #endregion
 
@@ -326,7 +313,7 @@ namespace MirrorLakeKusto.Storage
         #endregion
 
         #region DeltaTimestamp
-        /// <summary>Name of the staging table for the batch.</summary>
+        /// <summary>Time recorded in the Delta Table.</summary>
         /// <summary>
         /// For schema:  creation time of the table.
         /// For staging table:  doesn't exist.
@@ -337,16 +324,10 @@ namespace MirrorLakeKusto.Storage
         public DateTime? DeltaTimestamp { get; set; }
         #endregion
 
-        #region StagingTable
-        /// <summary>Name of the staging table for the batch.</summary>
-        [Index(900)]
-        public string? StagingTableName { get; set; }
-        #endregion
-
         #region Add / Remove common properties
         /// <summary>Path to the blob to add / remove.</summary>
         [Index(1000)]
-        public string? BlobPath { get; set; }
+        public Uri? BlobPath { get; set; }
 
         /// <summary>Partition values for the data being added / removed.</summary>
         [TypeConverter(typeof(DictionaryConverter))]
@@ -362,22 +343,9 @@ namespace MirrorLakeKusto.Storage
         /// <summary>Number of records in the blob to add.</summary>
         [Index(1300)]
         public long? RecordCount { get; set; }
-
-        /// <summary>Extents where the data of the blob has been ingested in staging.</summary>
-        [Index(1400)]
-        [TypeConverter(typeof(ListConverter<Guid>))]
-        public IImmutableList<Guid>? StagingExtentIds { get; set; }
         #endregion
 
         #region Schema only
-        /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(1500)]
-        public Guid? DeltaTableId { get; set; }
-
-        /// <summary>Unique id of the delta table (in Spark).</summary>
-        [Index(1600)]
-        public string? DeltaTableName { get; set; }
-
         /// <summary>List of the partition columns.</summary>
         [Index(1700)]
         [TypeConverter(typeof(ListConverter<string>))]
@@ -389,18 +357,19 @@ namespace MirrorLakeKusto.Storage
         public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion
 
-        public TransactionItem UpdateState(
-            TransactionItemState applied,
-            Action<TransactionItem>? action = null)
+        #region InternalState
+        /// <summary>Internal state ; implementation details.</summary>
+        /// <remarks>This was put in place to reduce the number of columns.</remarks>
+        [Index(10000)]
+        public InternalState InternalState { get; set; } = new InternalState();
+        #endregion
+
+        public TransactionItem UpdateState(TransactionItemState applied)
         {
             var clone = Clone(clone =>
             {
                 clone.State = applied;
                 clone.MirrorTimestamp = DateTime.UtcNow;
-                if (action != null)
-                {
-                    action(clone);
-                }
             });
 
             return clone;
@@ -424,6 +393,15 @@ namespace MirrorLakeKusto.Storage
             using (var writer = new StreamWriter(stream))
             using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
+                var builder = new StringBuilder();
+                var csv2 = new CsvWriter(new StringWriter(builder), CultureInfo.InvariantCulture);
+
+                csv2.WriteHeader<TransactionItem>();
+                csv2.NextRecord();
+                csv2.Flush();
+
+                var text = builder.ToString();
+
                 csv.WriteHeader<TransactionItem>();
                 csv.NextRecord();
                 csv.Flush();
@@ -482,6 +460,7 @@ namespace MirrorLakeKusto.Storage
     [JsonSerializable(typeof(IImmutableList<string>))]
     [JsonSerializable(typeof(IImmutableList<Guid>))]
     [JsonSerializable(typeof(IImmutableDictionary<string, string>))]
+    [JsonSerializable(typeof(InternalState))]
     internal partial class TransactionItemSerializerContext : JsonSerializerContext
     {
     }

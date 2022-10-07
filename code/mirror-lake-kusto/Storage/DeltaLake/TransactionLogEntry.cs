@@ -124,6 +124,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             long txId,
             string kustoDatabaseName,
             string kustoTableName,
+            Uri deltaTableStorageUrl,
             string jsonText)
         {
             var lines = jsonText.Split('\n');
@@ -150,10 +151,20 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 ? LoadMetadata(metadata.First(), txId, kustoDatabaseName, kustoTableName)
                 : null;
             var transactionAdds = add
-                .Select(a => LoadAdd(a, txId, kustoDatabaseName, kustoTableName))
+                .Select(a => LoadAdd(
+                    a,
+                    txId,
+                    kustoDatabaseName,
+                    kustoTableName,
+                    deltaTableStorageUrl))
                 .ToImmutableArray();
             var transactionRemoves = remove
-                .Select(a => LoadRemove(a, txId, kustoDatabaseName, kustoTableName))
+                .Select(a => LoadRemove(
+                    a,
+                    txId,
+                    kustoDatabaseName,
+                    kustoTableName,
+                    deltaTableStorageUrl))
                 .ToImmutableArray();
 
             return new TransactionLog(
@@ -194,10 +205,13 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 txId,
                 TransactionItemState.Initial,
                 createdTime,
-                metadata.Id,
-                metadata.Name,
                 partitionColumns,
-                schema);
+                schema,
+                new SchemaInternalState
+                {
+                    DeltaTableId = metadata.Id,
+                    DeltaTableName = metadata.Name,
+                });
 
             return item;
         }
@@ -206,7 +220,8 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             AddData addEntry,
             long txId,
             string kustoDatabaseName,
-            string kustoTableName)
+            string kustoTableName,
+            Uri deltaTableStorageUrl)
         {
             if (string.IsNullOrWhiteSpace(addEntry.Path))
             {
@@ -220,6 +235,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 .FromUnixTimeMilliseconds(addEntry.ModificationTime)
                 .UtcDateTime;
             var recordCount = ExtractRecordCount(addEntry.Stats);
+            var path = Path.Combine($"{deltaTableStorageUrl}/", addEntry.Path);
             var item = TransactionItem.CreateAddItem(
                 kustoDatabaseName,
                 kustoTableName,
@@ -227,7 +243,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 txId,
                 TransactionItemState.Initial,
                 modificationTime,
-                addEntry.Path,
+                new Uri(path),
                 addEntry.PartitionValues,
                 addEntry.Size,
                 recordCount);
@@ -239,7 +255,8 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             RemoveData removeEntry,
             long txId,
             string kustoDatabaseName,
-            string kustoTableName)
+            string kustoTableName,
+            Uri deltaTableStorageUrl)
         {
             if (string.IsNullOrWhiteSpace(removeEntry.Path))
             {
@@ -253,6 +270,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             var deletionTimestamp = DateTimeOffset
                 .FromUnixTimeMilliseconds(removeEntry.DeletionTimestamp)
                 .UtcDateTime;
+            var path = Path.Combine($"{deltaTableStorageUrl}/", removeEntry.Path);
             var item = TransactionItem.CreateRemoveItem(
                 kustoDatabaseName,
                 kustoTableName,
@@ -260,7 +278,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 txId,
                 TransactionItemState.Initial,
                 deletionTimestamp,
-                removeEntry.Path,
+                new Uri(path),
                 removeEntry.PartitionValues,
                 removeEntry.Size);
 
@@ -357,6 +375,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             long txId,
             string kustoDatabaseName,
             string kustoTableName,
+            Uri deltaTableStorageUrl,
             Stream parquetStream)
         {
             using (var parquetReader = new ParquetReader(parquetStream))
@@ -373,7 +392,12 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                     ? LoadMetadata(metadataCollection.First(), txId, kustoDatabaseName, kustoTableName)
                     : null;
                 var transactionAdds = addCollection
-                    .Select(a => LoadAdd(a, txId, kustoDatabaseName, kustoTableName))
+                    .Select(a => LoadAdd(
+                        a,
+                        txId,
+                        kustoDatabaseName,
+                        kustoTableName,
+                        deltaTableStorageUrl))
                     .ToImmutableArray();
 
                 return new TransactionLog(
