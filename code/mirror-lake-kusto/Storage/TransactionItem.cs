@@ -17,12 +17,84 @@ namespace MirrorLakeKusto.Storage
             new TransactionItemSerializerContext(
                 new JsonSerializerOptions
                 {
-                    WriteIndented = true
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                    WriteIndented = false
                 });
 
-        public static string ExternalTableSchema => "KustoDatabaseName:string, KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, DeltaTableId:guid, DeltaTableName:string, PartitionColumns:string, Schema:string, StagingTableName:string";
+        public static string ExternalTableSchema => "KustoDatabaseName:string, KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, PartitionColumns:dynamic, Schema:dynamic, InternalState:dynamic";
 
         #region Inner types
+        private class TransactionItemMap : ClassMap<TransactionItem>
+        {
+            public TransactionItemMap()
+            {
+                Map(m => m.KustoDatabaseName);
+                Map(m => m.KustoTableName);
+                Map(m => m.StartTxId);
+                Map(m => m.EndTxId);
+                Map(m => m.Action);
+                Map(m => m.State);
+                Map(m => m.MirrorTimestamp);
+                Map(m => m.DeltaTimestamp);
+                Map(m => m.BlobPath);
+                Map(m => m.PartitionValues).TypeConverter(new DictionaryConverter());
+                Map(m => m.Size);
+                Map(m => m.RecordCount);
+                Map(m => m.PartitionColumns).TypeConverter(new ListConverter<string>());
+                Map(m => m.Schema).TypeConverter(new ListConverter<ColumnDefinition>());
+                Map(m => m.InternalState).TypeConverter(new InternalStateConverter());
+            }
+        }
+
+        private class InternalStateConverter : DefaultTypeConverter
+        {
+            public override object? ConvertFromString(
+                string text,
+                IReaderRow row,
+                MemberMapData memberMapData)
+            {
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    return new InternalState();
+                }
+                else
+                {
+                    var state = JsonSerializer.Deserialize(
+                        text,
+                        typeof(InternalState),
+                        _transactionItemSerializerContext);
+
+                    if (state == null)
+                    {
+                        throw new MirrorException($"Can't deserialize internal state:  '{text}'");
+                    }
+
+                    return state;
+                }
+            }
+
+            public override string? ConvertToString(
+                object value,
+                IWriterRow row,
+                MemberMapData memberMapData)
+            {
+                var state = (InternalState)value;
+
+                if (state != null)
+                {
+                    var text = JsonSerializer.Serialize(
+                        state,
+                        typeof(InternalState),
+                        _transactionItemSerializerContext);
+
+                    return text;
+                }
+                else
+                {
+                    return string.Empty;
+                }
+            }
+        }
         private class DictionaryConverter : DefaultTypeConverter
         {
             public override object? ConvertFromString(
@@ -320,47 +392,52 @@ namespace MirrorLakeKusto.Storage
         /// For add:  modification time.
         /// For remove:  deletion time.
         /// </summary>
-        [Index(800)]
+        [Index(1000)]
         public DateTime? DeltaTimestamp { get; set; }
         #endregion
 
         #region Add / Remove common properties
         /// <summary>Path to the blob to add / remove.</summary>
-        [Index(1000)]
+        [Index(2000)]
         public Uri? BlobPath { get; set; }
 
         /// <summary>Partition values for the data being added / removed.</summary>
-        [TypeConverter(typeof(DictionaryConverter))]
-        [Index(1100)]
+        //[TypeConverter(typeof(DictionaryConverter))]
+        //[Index(2100)]
+        [Ignore]
         public IImmutableDictionary<string, string>? PartitionValues { get; set; }
 
         /// <summary>Size in byte of the blob to add / remove.</summary>
-        [Index(1200)]
+        [Index(2200)]
         public long? Size { get; set; }
         #endregion
 
         #region Add only
         /// <summary>Number of records in the blob to add.</summary>
-        [Index(1300)]
+        [Index(3000)]
         public long? RecordCount { get; set; }
         #endregion
 
         #region Schema only
         /// <summary>List of the partition columns.</summary>
-        [Index(1700)]
-        [TypeConverter(typeof(ListConverter<string>))]
+        //[Index(4000)]
+        //[TypeConverter(typeof(ListConverter<string>))]
+        [Ignore]
         public IImmutableList<string>? PartitionColumns { get; set; }
 
         /// <summary>Schema of the table:  types for each column.</summary>
-        [Index(1800)]
-        [TypeConverter(typeof(ListConverter<ColumnDefinition>))]
+        //[Index(4100)]
+        //[TypeConverter(typeof(ListConverter<ColumnDefinition>))]
+        [Ignore]
         public IImmutableList<ColumnDefinition>? Schema { get; set; }
         #endregion
 
         #region InternalState
         /// <summary>Internal state ; implementation details.</summary>
         /// <remarks>This was put in place to reduce the number of columns.</remarks>
-        [Index(10000)]
+        //[Index(10000)]
+        [Ignore]
+        //[TypeConverter(typeof(InternalStateConverter))]
         public InternalState InternalState { get; set; } = new InternalState();
         #endregion
 
@@ -393,15 +470,7 @@ namespace MirrorLakeKusto.Storage
             using (var writer = new StreamWriter(stream))
             using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                var builder = new StringBuilder();
-                var csv2 = new CsvWriter(new StringWriter(builder), CultureInfo.InvariantCulture);
-
-                csv2.WriteHeader<TransactionItem>();
-                csv2.NextRecord();
-                csv2.Flush();
-
-                var text = builder.ToString();
-
+                csv.Context.RegisterClassMap<TransactionItemMap>();
                 csv.WriteHeader<TransactionItem>();
                 csv.NextRecord();
                 csv.Flush();
@@ -420,6 +489,7 @@ namespace MirrorLakeKusto.Storage
             using (var writer = new StreamWriter(stream))
             using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
+                csv.Context.RegisterClassMap<TransactionItemMap>();
                 foreach (var item in items)
                 {
                     csv.WriteRecord(item);
@@ -443,6 +513,7 @@ namespace MirrorLakeKusto.Storage
             using (var reader = new StreamReader(stream))
             using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
             {
+                csv.Context.RegisterClassMap<TransactionItemMap>();
                 if (validateHeader)
                 {
                     csv.Read();

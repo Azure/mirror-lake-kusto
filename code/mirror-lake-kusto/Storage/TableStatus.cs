@@ -91,8 +91,7 @@ namespace MirrorLakeKusto.Storage
             {
                 throw new MirrorException("No schema defined in transactions");
             }
-            if (schemaItem.Schema == null
-                || schemaItem.PartitionColumns == null)
+            if (schemaItem.Schema == null || schemaItem.PartitionColumns == null)
             {
                 throw new MirrorException("No schema or partition columns in the schema item");
             }
