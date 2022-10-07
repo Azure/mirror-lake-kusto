@@ -1,15 +1,24 @@
 ﻿using MirrorLakeKusto.Kusto;
 using MirrorLakeKusto.Storage;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Reflection.Metadata;
 
 namespace MirrorLakeKusto
 {
     internal class BlobStagingOrchestration
     {
+        private static readonly TimeSpan DELAY_BETWEEN_PERSIST = TimeSpan.FromSeconds(5);
+
         private readonly DatabaseGateway _databaseGateway;
         private readonly TableDefinition _stagingTable;
         private readonly TableStatus _tableStatus;
+        private readonly Uri _deltaTableStorageUrl;
         private readonly ConcurrentQueue<IEnumerable<TransactionItem>> _itemsBatchToIngest;
+        private readonly ConcurrentQueue<TransactionItem> _itemStatusToPersist
+            = new ConcurrentQueue<TransactionItem>();
+        //  Triggered when the items to ingest queue is empty (avoid sleeping to find out)
+        private readonly TaskCompletionSource _ingestionQueueTask = new TaskCompletionSource();
 
         #region Constructors
         public static async Task EnsureAllStagedAsync(
@@ -17,13 +26,15 @@ namespace MirrorLakeKusto
             TableDefinition stagingTable,
             TableStatus tableStatus,
             long startTxId,
+            Uri deltaTableStorageUrl,
             CancellationToken ct)
         {
             var orchestration = new BlobStagingOrchestration(
                 databaseGateway,
                 stagingTable,
                 tableStatus,
-                startTxId);
+                startTxId,
+                deltaTableStorageUrl);
 
             await orchestration.RunAsync(ct);
         }
@@ -32,7 +43,8 @@ namespace MirrorLakeKusto
             DatabaseGateway databaseGateway,
             TableDefinition stagingTable,
             TableStatus tableStatus,
-            long startTxId)
+            long startTxId,
+            Uri deltaTableStorageUrl)
         {
             var logs = tableStatus.GetBatch(startTxId);
             var itemsToIngest = logs.Adds;
@@ -40,6 +52,7 @@ namespace MirrorLakeKusto
             _databaseGateway = databaseGateway;
             _stagingTable = stagingTable;
             _tableStatus = tableStatus;
+            _deltaTableStorageUrl = deltaTableStorageUrl;
             _itemsBatchToIngest = new ConcurrentQueue<IEnumerable<TransactionItem>>(new[]
                 {
                     itemsToIngest
@@ -51,8 +64,100 @@ namespace MirrorLakeKusto
         private async Task RunAsync(CancellationToken ct)
         {
             var pipelineWidth = await ComputePipelineWidthAsync(ct);
+            var ingestionTasks = Enumerable.Range(0, pipelineWidth)
+                .Select(i => IngestItemsAsync(ct))
+                .ToImmutableArray();
+            var persistStatusTask = LoopPersistStatusAsync(ct);
 
-            throw new NotImplementedException();
+            await Task.WhenAll(ingestionTasks);
+            //  Signal end of ingestion
+            _ingestionQueueTask.TrySetResult();
+            //  This should stop immediately
+            await persistStatusTask;
+        }
+
+        private async Task LoopPersistStatusAsync(CancellationToken ct)
+        {
+            while (!_ingestionQueueTask.Task.IsCompleted)
+            {   //  First sleep a little
+                await Task.WhenAll(_ingestionQueueTask.Task, Task.Delay(DELAY_BETWEEN_PERSIST));
+
+                await PersistStatusAsync(ct);
+            }
+            //  Pickup items that might have slipped in racing condition
+            await PersistStatusAsync(ct);
+        }
+
+        private async Task PersistStatusAsync(CancellationToken ct)
+        {
+            var items = DequeueAllItemStatusToPersist();
+
+            if (items.Any())
+            {
+                await _tableStatus.PersistNewItemsAsync(items, ct);
+            }
+        }
+
+        private IImmutableList<TransactionItem> DequeueAllItemStatusToPersist()
+        {
+            var builder = ImmutableArray<TransactionItem>.Empty.ToBuilder();
+
+            while (_itemStatusToPersist.Any())
+            {
+                if (_itemStatusToPersist.TryDequeue(out var item))
+                {
+                    builder.Add(item);
+                }
+            }
+
+            return builder.ToImmutableArray();
+        }
+
+        private async Task IngestItemsAsync(CancellationToken ct)
+        {
+            while (_itemsBatchToIngest.Any())
+            {
+                if (_itemsBatchToIngest.TryDequeue(out var items))
+                {
+                    var urlList = items
+                        .Select(i => Path.Combine($"{_deltaTableStorageUrl}/", i.BlobPath!));
+                    var urlListText = string.Join(
+                        ", " + Environment.NewLine,
+                        urlList.Select(u => $"'{u};impersonate'"));
+                    var ingestionCommandText = @$"
+.ingest into table {_stagingTable.Name}
+(
+    {urlListText}
+) with
+(
+    format='parquet',
+    ingestionMappingReference='Mapping'
+)";
+                    //  Ingest through Query Engine
+                    var results = await _databaseGateway.ExecuteCommandAsync(
+                        ingestionCommandText,
+                        r => new
+                        {
+                            ExtentId = (Guid)r["ExtentId"],
+                            ItemLoaded = (string)r["ItemLoaded"],
+                            Duration = (TimeSpan)r["Duration"],
+                            HasErrors = (bool)r["HasErrors"],
+                            OperationId = (Guid)r["OperationId"]
+                        },
+                        ct);
+                    var extentIds = results.Select(r => r.ExtentId).ToImmutableArray();
+                    var newItems = items
+                        .Select(i => i.UpdateState(
+                            TransactionItemState.Staged,
+                            i => i.StagingExtentIds = extentIds));
+
+                    //  Queue updated items to persist
+                    foreach (var newItem in newItems)
+                    {
+                        _itemStatusToPersist.Enqueue(newItem);
+                    }
+                }
+            }
         }
 
         private async Task<int> ComputePipelineWidthAsync(CancellationToken ct)

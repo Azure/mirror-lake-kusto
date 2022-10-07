@@ -13,8 +13,7 @@ namespace MirrorLakeKusto.Storage
         private static readonly Dictionary<string, string> EMPTY_MAP =
             new Dictionary<string, string>();
 
-        private const string BLOB_PATH_COLUMN = "KM_BlobPath";
-        private const string BLOB_ROW_NUMBER_COLUMN = "KM_Blob_RowNumber";
+        private const string BLOB_PATH_COLUMN = "MLK_BlobPath";
 
         #region Constructors
         public TableDefinition(
@@ -64,11 +63,6 @@ namespace MirrorLakeKusto.Storage
                     ColumnName = BLOB_PATH_COLUMN,
                     ColumnType = "string"
                 })
-                .Append(new ColumnDefinition
-                {
-                    ColumnName = BLOB_ROW_NUMBER_COLUMN,
-                    ColumnType = "long"
-                })
                 .ToImmutableArray();
 
             return new TableDefinition(Name, moreColumns, PartitionColumns);
@@ -85,8 +79,6 @@ namespace MirrorLakeKusto.Storage
         {
             var location =
                 new Dictionary<string, string>() { { "ConstValue", blobPath } };
-            var lineNumber =
-                new Dictionary<string, string>() { { "Transform", "SourceLineNumber" } };
             var ingestionMappings = Columns
                 .Select(c => new ColumnMapping()
                 {
@@ -94,8 +86,6 @@ namespace MirrorLakeKusto.Storage
                     ColumnType = c.ColumnType,
                     Properties = c.ColumnName == BLOB_PATH_COLUMN
                     ? location
-                    : c.ColumnName == BLOB_ROW_NUMBER_COLUMN
-                    ? lineNumber
                     : partitionValues.ContainsKey(c.ColumnName)
                     ? new Dictionary<string, string>() {
                         { "ConstValue", partitionValues[c.ColumnName] } }
