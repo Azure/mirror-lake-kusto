@@ -31,7 +31,6 @@
 
 	<ItemGroup>
 	  <Folder Include="Kusto\" />
-	  <Folder Include="Orchestrations\" />
 	  <Folder Include="Properties\" />
 	  <Folder Include="Storage\DeltaLake\" />
 	</ItemGroup>
