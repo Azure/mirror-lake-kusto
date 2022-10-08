@@ -14,9 +14,9 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly TableDefinition _stagingTable;
         private readonly TableStatus _tableStatus;
         private readonly Uri _deltaTableStorageUrl;
-        private readonly ConcurrentQueue<IEnumerable<TransactionItem>> _itemsBatchToIngest;
-        private readonly ConcurrentQueue<TransactionItem> _itemStatusToPersist
-            = new ConcurrentQueue<TransactionItem>();
+        private readonly ConcurrentQueue<IEnumerable<TransactionItem>> _itemsToIngest;
+        private readonly ConcurrentQueue<IEnumerable<TransactionItem>> _itemsToPersist
+            = new ConcurrentQueue<IEnumerable<TransactionItem>>();
         //  Triggered when the items to ingest queue is empty (avoid sleeping to find out)
         private readonly TaskCompletionSource _ingestionQueueTask = new TaskCompletionSource();
 
@@ -53,7 +53,7 @@ namespace MirrorLakeKusto.Orchestrations
             _stagingTable = stagingTable;
             _tableStatus = tableStatus;
             _deltaTableStorageUrl = deltaTableStorageUrl;
-            _itemsBatchToIngest = new ConcurrentQueue<IEnumerable<TransactionItem>>(new[]
+            _itemsToIngest = new ConcurrentQueue<IEnumerable<TransactionItem>>(new[]
                 {
                     itemsToIngest
                 });
@@ -94,19 +94,21 @@ namespace MirrorLakeKusto.Orchestrations
 
             if (items.Any())
             {
-                await _tableStatus.PersistNewItemsAsync(items, ct);
+                var itemsList = items.SelectMany(i => i);
+
+                await _tableStatus.PersistNewItemsAsync(itemsList, ct);
             }
         }
 
-        private IImmutableList<TransactionItem> DequeueAllItemStatusToPersist()
+        private IImmutableList<IEnumerable<TransactionItem>> DequeueAllItemStatusToPersist()
         {
-            var builder = ImmutableArray<TransactionItem>.Empty.ToBuilder();
+            var builder = ImmutableArray<IEnumerable<TransactionItem>>.Empty.ToBuilder();
 
-            while (_itemStatusToPersist.Any())
+            while (_itemsToPersist.Any())
             {
-                if (_itemStatusToPersist.TryDequeue(out var item))
+                if (_itemsToPersist.TryDequeue(out var items))
                 {
-                    builder.Add(item);
+                    builder.Add(items);
                 }
             }
 
@@ -115,9 +117,9 @@ namespace MirrorLakeKusto.Orchestrations
 
         private async Task IngestItemsAsync(CancellationToken ct)
         {
-            while (_itemsBatchToIngest.Any())
+            while (_itemsToIngest.Any())
             {
-                if (_itemsBatchToIngest.TryDequeue(out var items))
+                if (_itemsToIngest.TryDequeue(out var items))
                 {
                     var urlList = items.Select(i => i.BlobPath!);
                     var urlListText = string.Join(
@@ -151,10 +153,7 @@ namespace MirrorLakeKusto.Orchestrations
                         .Clone(i => i.InternalState.AddInternalState!.StagingExtentIds = extentIds));
 
                     //  Queue updated items to persist
-                    foreach (var newItem in newItems)
-                    {
-                        _itemStatusToPersist.Enqueue(newItem);
-                    }
+                    _itemsToPersist.Enqueue(newItems);
                 }
             }
         }
@@ -168,7 +167,7 @@ namespace MirrorLakeKusto.Orchestrations
                 r => (long)r[0],
                 ct);
             var ingestionSlotCount = (int)ingestionSlots.First();
-            var width = Math.Min(ingestionSlotCount, _itemsBatchToIngest.Count);
+            var width = Math.Min(ingestionSlotCount, _itemsToIngest.Count);
 
             return width;
         }
