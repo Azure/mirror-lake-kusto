@@ -13,12 +13,7 @@ namespace MirrorLakeKusto.Orchestrations
 {
     internal class DeltaTableOrchestration
     {
-        private const int EXTENT_PROBE_BATCH_SIZE = 5;
-        private const int EXTENT_MOVE_BATCH_SIZE = 5;
-        private const string INGEST_BY_PREFIX = "ingest-by:";
-        private const string STAGED_TAG = "km_staged";
         private static readonly TimeSpan BETWEEN_TX_PROBE_DELAY = TimeSpan.FromSeconds(5);
-        private static readonly TimeSpan BETWEEN_EXTENT_PROBE_DELAY = TimeSpan.FromSeconds(5);
 
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
@@ -126,7 +121,7 @@ namespace MirrorLakeKusto.Orchestrations
 
             await LoadTransactionBatchAsync(startTxId, mainTable, stagingTable, ct);
             Trace.WriteLine(
-                $"Elapsed time for transaction batch {logs.AllItems.First().StartTxId}"
+                $"Elapsed time for transaction batch {logs.AllItems.First().StartTxId} "
                 + "to {logs.AllItems.First().EndTxId}:  {stopwatch.Elapsed}");
         }
 
@@ -354,7 +349,7 @@ namespace MirrorLakeKusto.Orchestrations
         {
             var uniqueId = DateTime.UtcNow.Ticks.ToString("x8");
 
-            return $"KM_Staging_{_tableStatus.TableName}_{startTxId}_{uniqueId}";
+            return $"MLK_Staging_{_tableStatus.TableName}_{startTxId}_{uniqueId}";
         }
     }
 }

@@ -3,6 +3,7 @@ using MirrorLakeKusto.Kusto;
 using MirrorLakeKusto.Storage;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace MirrorLakeKusto.Orchestrations
 {
@@ -60,6 +61,8 @@ namespace MirrorLakeKusto.Orchestrations
 
             if (toAdd.Any())
             {
+                Trace.WriteLine($"Loading {toAdd.Count()} blobs");
+
                 var extentIds = toAdd
                     .Select(a => a.InternalState.AddInternalState!.StagingExtentId)
                     .Distinct()
@@ -87,6 +90,8 @@ to table {_tableStatus.TableName}";
 
             if (toRemove.Any())
             {
+                Trace.WriteLine($"Removing {toRemove.Count()} blobs");
+
                 var properties = new ClientRequestProperties();
                 var data = toRemove
                     .Zip(Enumerable.Range(0, toRemove.Count()), (r, i) => new { r, i })

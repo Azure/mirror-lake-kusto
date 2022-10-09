@@ -2,6 +2,7 @@
 using MirrorLakeKusto.Storage;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Reflection.Metadata;
 using YamlDotNet.Core.Tokens;
 
@@ -59,6 +60,8 @@ namespace MirrorLakeKusto.Orchestrations
         #region Orchestration
         private async Task RunAsync(CancellationToken ct)
         {
+            Trace.WriteLine($"Staging {_itemsToIngest.SelectMany(i=>i).Count()} blobs");
+
             var pipelineWidth = await ComputePipelineWidthAsync(ct);
             var ingestionTasks = Enumerable.Range(0, pipelineWidth)
                 .Select(i => IngestItemsLoopAsync(ct))
