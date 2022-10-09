@@ -152,14 +152,16 @@ namespace MirrorLakeKusto.Orchestrations
                 _tableStatus,
                 logs.StartTxId,
                 ct);
+            if (logs.Metadata != null && logs.StartTxId != 0)
+            {
+                await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
+            }
             await BlobLoadingOrchestration.EnsureAllLoadedAsync(
                 _databaseGateway,
                 stagingTable,
                 _tableStatus,
                 logs.StartTxId,
-                _deltaTableGateway.DeltaTableStorageUrl,
                 ct);
-            await EnsureAllLoadedAsync(mainTable, stagingTable, logs.StartTxId, ct);
             await DropStagingTableAsync(logs.StagingTable!, ct);
             Trace.TraceInformation(
                 $"Table '{_tableStatus.TableName}', "
@@ -185,88 +187,6 @@ namespace MirrorLakeKusto.Orchestrations
 
             await _tableStatus.PersistNewItemsAsync(resetAdds.Append(stagingTable), ct);
             await ProcessTransactionBatchAsync(startTxId, ct);
-        }
-
-        private async Task EnsureAllLoadedAsync(
-            TableDefinition mainTable,
-            TableDefinition stagingTable,
-            long startTxId,
-            CancellationToken ct)
-        {
-            var logs = _tableStatus.GetBatch(startTxId);
-            var blobPathToRemove = logs.Removes
-                .Select(i => i.BlobPath!)
-                .Distinct()
-                .ToImmutableArray();
-            var removeBlobPathsTask = RemoveBlobPathsAsync(mainTable, blobPathToRemove, ct);
-
-            if (logs.Metadata != null)
-            {
-                await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
-            }
-
-            Trace.WriteLine($"Loading extents in main table");
-            await LoadExtentsAsync(stagingTable, ct);
-            await removeBlobPathsTask;
-            await DropTagsAsync(startTxId, ct);
-
-            var newItems = logs.Adds.Concat(logs.Removes)
-                .Select(item => item.UpdateState(TransactionItemState.Done));
-
-            await _tableStatus.PersistNewItemsAsync(newItems, ct);
-        }
-
-        private async Task DropTagsAsync(long startTxId, CancellationToken ct)
-        {
-            var dropTagsCommandText = $@".drop extent tags <|
-.show table {_tableStatus.TableName} extents where tags contains '{INGEST_BY_PREFIX}'";
-
-            await _databaseGateway.ExecuteCommandAsync(dropTagsCommandText, r => 0, ct);
-
-            var logs = _tableStatus.GetBatch(startTxId);
-            var newAdded = logs.Adds
-                .Select(item => item.UpdateState(TransactionItemState.Done));
-
-            if (newAdded.Any())
-            {
-                await _tableStatus.PersistNewItemsAsync(newAdded, ct);
-            }
-        }
-
-        private async Task LoadExtentsAsync(TableDefinition stagingTable, CancellationToken ct)
-        {
-            do
-            {   //  Loop until we moved all extents
-                var moveCommandText = $@".move extents to table {_tableStatus.TableName} <|
-.show table {stagingTable.Name} extents where tags contains 'ingest-by'
-| take {EXTENT_MOVE_BATCH_SIZE}";
-                var results =
-                    await _databaseGateway.ExecuteCommandAsync(moveCommandText, r => 0, ct);
-
-                if (!results.Any())
-                {
-                    return;
-                }
-            }
-            while (true);
-        }
-
-        private async Task RemoveBlobPathsAsync(
-            TableDefinition mainTable,
-            IEnumerable<Uri> blobPathToRemove,
-            CancellationToken ct)
-        {
-            if (blobPathToRemove.Any())
-            {
-                var commandTextPrefix = @$".delete table {mainTable.Name} records <|
-{mainTable.Name}";
-                var pathColumn = mainTable.BlobPathColumnName;
-                var predicates = blobPathToRemove
-                    .Select(b => $"{Environment.NewLine}| where {pathColumn}=='{b}'");
-                var commandText = commandTextPrefix + string.Join(string.Empty, predicates);
-
-                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
-            }
         }
 
         private async Task DropStagingTableAsync(
