@@ -14,7 +14,6 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly DatabaseGateway _databaseGateway;
         private readonly TableDefinition _stagingTable;
         private readonly TableStatus _tableStatus;
-        private readonly Uri _deltaTableStorageUrl;
         private readonly ConcurrentQueue<IEnumerable<TransactionItem>> _itemsToIngest;
         private readonly ConcurrentQueue<IEnumerable<TransactionItem>> _itemsToPersist
             = new ConcurrentQueue<IEnumerable<TransactionItem>>();
@@ -27,15 +26,13 @@ namespace MirrorLakeKusto.Orchestrations
             TableDefinition stagingTable,
             TableStatus tableStatus,
             long startTxId,
-            Uri deltaTableStorageUrl,
             CancellationToken ct)
         {
             var orchestration = new BlobStagingOrchestration(
                 databaseGateway,
                 stagingTable,
                 tableStatus,
-                startTxId,
-                deltaTableStorageUrl);
+                startTxId);
 
             await orchestration.RunAsync(ct);
         }
@@ -44,8 +41,7 @@ namespace MirrorLakeKusto.Orchestrations
             DatabaseGateway databaseGateway,
             TableDefinition stagingTable,
             TableStatus tableStatus,
-            long startTxId,
-            Uri deltaTableStorageUrl)
+            long startTxId)
         {
             var logs = tableStatus.GetBatch(startTxId);
             var itemsToIngest = logs.Adds;
@@ -53,7 +49,6 @@ namespace MirrorLakeKusto.Orchestrations
             _databaseGateway = databaseGateway;
             _stagingTable = stagingTable;
             _tableStatus = tableStatus;
-            _deltaTableStorageUrl = deltaTableStorageUrl;
             _itemsToIngest = new ConcurrentQueue<IEnumerable<TransactionItem>>(new[]
                 {
                     itemsToIngest
