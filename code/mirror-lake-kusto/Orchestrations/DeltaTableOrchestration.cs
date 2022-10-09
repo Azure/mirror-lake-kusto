@@ -153,13 +153,6 @@ namespace MirrorLakeKusto.Orchestrations
                 logs.StartTxId,
                 _deltaTableGateway.DeltaTableStorageUrl,
                 ct);
-            await BlobLoadingOrchestration.EnsureAllLoadedAsync(
-                _databaseGateway,
-                stagingTable,
-                _tableStatus,
-                logs.StartTxId,
-                _deltaTableGateway.DeltaTableStorageUrl,
-                ct);
             await EnsureAllLoadedAsync(mainTable, stagingTable, logs.StartTxId, ct);
             await DropStagingTableAsync(logs.StagingTable!, ct);
             Trace.TraceInformation(

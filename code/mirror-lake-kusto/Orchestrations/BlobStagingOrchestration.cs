@@ -3,6 +3,7 @@ using MirrorLakeKusto.Storage;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using YamlDotNet.Core.Tokens;
 
 namespace MirrorLakeKusto.Orchestrations
 {
@@ -65,7 +66,7 @@ namespace MirrorLakeKusto.Orchestrations
         {
             var pipelineWidth = await ComputePipelineWidthAsync(ct);
             var ingestionTasks = Enumerable.Range(0, pipelineWidth)
-                .Select(i => IngestItemsAsync(ct))
+                .Select(i => IngestItemsLoopAsync(ct))
                 .ToImmutableArray();
             var persistStatusTask = LoopPersistStatusAsync(ct);
 
@@ -115,17 +116,71 @@ namespace MirrorLakeKusto.Orchestrations
             return builder.ToImmutableArray();
         }
 
-        private async Task IngestItemsAsync(CancellationToken ct)
+        private async Task IngestItemsLoopAsync(CancellationToken ct)
         {
             while (_itemsToIngest.Any())
             {
                 if (_itemsToIngest.TryDequeue(out var items))
                 {
-                    var urlList = items.Select(i => i.BlobPath!);
-                    var urlListText = string.Join(
-                        ", " + Environment.NewLine,
-                        urlList.Select(u => $"'{u};impersonate'"));
-                    var ingestionCommandText = @$"
+                    var extentIds = await IngestItemsAsync(items, ct);
+                    var extentBlobMap = await ComputeExtentBlobMapAsync(extentIds, ct);
+                    var newItems = items
+                        .Select(i => i
+                            .UpdateState(TransactionItemState.Staged)
+                            .Clone(i =>
+                            {
+                                var mapValue = extentBlobMap[i.BlobPath!];
+
+                                i.InternalState.AddInternalState!.StagingExtentId = mapValue.extentId;
+                                i.InternalState.AddInternalState!.IngestionTime = mapValue.ingestionTime;
+                            }));
+
+                    //  Queue updated items to persist
+                    _itemsToPersist.Enqueue(newItems);
+                }
+            }
+        }
+
+        private async Task<IImmutableDictionary<Uri, (Guid extentId, DateTime ingestionTime)>> ComputeExtentBlobMapAsync(
+            IEnumerable<Guid> extentIds,
+            CancellationToken ct)
+        {
+            var extentIdsText = string.Join(", ", extentIds.Select(i => $"'{i}'"));
+            var queryText = @$"{_stagingTable.Name}
+| where extent_id() in ({extentIdsText})
+| summarize by
+    ExtentId = extent_id(),
+    BlobPath = {_stagingTable.BlobPathColumnName},
+    IngestionTime = ingestion_time()";
+            var aggregateResults = await _databaseGateway.ExecuteQueryAsync(
+                queryText,
+                r => new
+                {
+                    ExtentId = (Guid)r["ExtentId"],
+                    BlobPath = (string)r["BlobPath"],
+                    IngestionTime = (DateTime)r["IngestionTime"]
+                },
+                ct);
+            var map = aggregateResults
+                .Select(r => new
+                {
+                    Key = new Uri(r.BlobPath),
+                    Value = (r.ExtentId, r.IngestionTime)
+                })
+                .ToImmutableDictionary(r => r.Key, r => r.Value);
+
+            return map;
+        }
+
+        private async Task<ImmutableArray<Guid>> IngestItemsAsync(
+            IEnumerable<TransactionItem> items,
+            CancellationToken ct)
+        {
+            var urlList = items.Select(i => i.BlobPath!);
+            var urlListText = string.Join(
+                ", " + Environment.NewLine,
+                urlList.Select(u => $"'{u};impersonate'"));
+            var ingestionCommandText = @$"
 .ingest into table {_stagingTable.Name}
 (
     {urlListText}
@@ -134,28 +189,20 @@ namespace MirrorLakeKusto.Orchestrations
     format='parquet',
     ingestionMappingReference='Mapping'
 )";
-                    //  Ingest through Query Engine
-                    var results = await _databaseGateway.ExecuteCommandAsync(
-                        ingestionCommandText,
-                        r => new
-                        {
-                            ExtentId = (Guid)r["ExtentId"],
-                            ItemLoaded = (string)r["ItemLoaded"],
-                            Duration = (TimeSpan)r["Duration"],
-                            HasErrors = (bool)r["HasErrors"],
-                            OperationId = (Guid)r["OperationId"]
-                        },
-                        ct);
-                    var extentIds = results.Select(r => r.ExtentId).ToImmutableArray();
-                    var newItems = items
-                        .Select(i => i
-                        .UpdateState(TransactionItemState.Staged)
-                        .Clone(i => i.InternalState.AddInternalState!.StagingExtentIds = extentIds));
-
-                    //  Queue updated items to persist
-                    _itemsToPersist.Enqueue(newItems);
-                }
-            }
+            //  Ingest through Query Engine
+            var ingestResults = await _databaseGateway.ExecuteCommandAsync(
+                ingestionCommandText,
+                r => new
+                {
+                    ExtentId = (Guid)r["ExtentId"],
+                    ItemLoaded = (string)r["ItemLoaded"],
+                    Duration = (TimeSpan)r["Duration"],
+                    HasErrors = (bool)r["HasErrors"],
+                    OperationId = (Guid)r["OperationId"]
+                },
+                ct);
+            var extentIds = ingestResults.Select(r => r.ExtentId).ToImmutableArray();
+            return extentIds;
         }
 
         private async Task<int> ComputePipelineWidthAsync(CancellationToken ct)

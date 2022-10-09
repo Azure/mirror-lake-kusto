@@ -9,7 +9,10 @@ namespace MirrorLakeKusto.Storage
 {
     internal class AddInternalState
     {
-        /// <summary>Extents where the data of the blob has been ingested in staging.</summary>
-        public IImmutableList<Guid>? StagingExtentIds { get; set; }
+        /// <summary>Extent ID where the data of the blob has been ingested in staging.</summary>
+        public Guid? StagingExtentId { get; set; }
+
+        /// <summary>Ingestion time of the blob.  Useful to time filter at deletion.</summary>
+        public DateTime? IngestionTime { get; set; }
     }
 }
