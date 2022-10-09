@@ -60,7 +60,7 @@ namespace MirrorLakeKusto.Orchestrations
         #region Orchestration
         private async Task RunAsync(CancellationToken ct)
         {
-            Trace.WriteLine($"Staging {_itemsToIngest.SelectMany(i=>i).Count()} blobs");
+            Trace.WriteLine($"Staging {_itemsToIngest.SelectMany(i => i).Count()} blobs");
 
             var pipelineWidth = await ComputePipelineWidthAsync(ct);
             var ingestionTasks = Enumerable.Range(0, pipelineWidth)
@@ -120,9 +120,15 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 if (_itemsToIngest.TryDequeue(out var items))
                 {
-                    var extentIds = await IngestItemsAsync(items, ct);
+                    var emptyItems = items
+                        .Where(i => i.RecordCount == 0)
+                        .ToImmutableArray();
+                    var nonEmptyItems = items
+                        .Where(i => i.RecordCount != 0)
+                        .ToImmutableArray();
+                    var extentIds = await IngestItemsAsync(nonEmptyItems, ct);
                     var extentBlobMap = await ComputeExtentBlobMapAsync(extentIds, ct);
-                    var newItems = items
+                    var newNonEmptyItems = nonEmptyItems
                         .Select(i => i
                             .UpdateState(TransactionItemState.Staged)
                             .Clone(i =>
@@ -132,6 +138,9 @@ namespace MirrorLakeKusto.Orchestrations
                                 i.InternalState.AddInternalState!.StagingExtentId = mapValue.extentId;
                                 i.InternalState.AddInternalState!.IngestionTime = mapValue.ingestionTime;
                             }));
+                    var newEmptyItems = nonEmptyItems
+                        .Select(i => i.UpdateState(TransactionItemState.Done));
+                    var newItems = newNonEmptyItems.Concat(newEmptyItems).ToImmutableArray();
 
                     //  Queue updated items to persist
                     _itemsToPersist.Enqueue(newItems);
