@@ -8,7 +8,7 @@ on:
         default:  true
         description:  'Execute Mirror Lake Kusto out-of-proc:  true or false'
       testFilter:
-        required:  true
+        required:  false
         default:  ""
         description:  'String to look for in test'
 
