@@ -7,6 +7,10 @@ on:
         required:  true
         default:  true
         description:  'Execute Mirror Lake Kusto out-of-proc:  true or false'
+      testFilter:
+        required:  true
+        default:  ""
+        description:  'String to look for in test'
 
 jobs:
   linux:
@@ -67,5 +71,17 @@ jobs:
     - name: ADX-based integration tests (out-of-proc)
       shell:  bash
       run: |
-        dotnet test code/MirrorLakeKustoTest \
-        --configuration Release --no-build --verbosity normal
+        if [ ${{ github.event.inputs.testFilter }} == "" ]
+        then
+          dotnet test code/MirrorLakeKustoTest \
+          --configuration Release --no-build --verbosity normal
+        else
+          testFilter="FullyQualifiedName~${{ github.event.inputs.testFilter }}"
+
+          echo "Test filter:  '$testFilter'"
+
+          dotnet test code/MirrorLakeKustoTest \
+          --configuration Release --no-build --verbosity normal \
+          --filter "$testFilter"
+        fi
+
