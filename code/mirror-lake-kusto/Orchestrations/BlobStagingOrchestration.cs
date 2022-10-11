@@ -138,7 +138,7 @@ namespace MirrorLakeKusto.Orchestrations
                                 i.InternalState.AddInternalState!.StagingExtentId = mapValue.extentId;
                                 i.InternalState.AddInternalState!.IngestionTime = mapValue.ingestionTime;
                             }));
-                    var newEmptyItems = nonEmptyItems
+                    var newEmptyItems = emptyItems
                         .Select(i => i.UpdateState(TransactionItemState.Done));
                     var newItems = newNonEmptyItems.Concat(newEmptyItems).ToImmutableArray();
 
