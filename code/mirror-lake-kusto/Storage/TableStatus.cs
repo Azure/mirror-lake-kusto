@@ -79,6 +79,17 @@ namespace MirrorLakeKusto.Storage
             return new TransactionLog(batchItems);
         }
 
+        public TransactionLog GetHistorical(long beforeTxId)
+        {
+            var logs = _statuses
+                .Where(s => s.EndTxId < beforeTxId)
+                .GroupBy(s => s.StartTxId)
+                .Select(g => new TransactionLog(g));
+            var log = TransactionLog.Coalesce(logs);
+
+            return log;
+        }
+
         public TableDefinition GetTableDefinition(long upToTxId)
         {
             var schemaItem = _statuses

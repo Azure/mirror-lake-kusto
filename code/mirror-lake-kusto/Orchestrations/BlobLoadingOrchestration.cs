@@ -78,7 +78,8 @@ to table {_tableStatus.TableName}";
 
             var newAdds = toAdd
                 .Select(a => a.UpdateState(TransactionItemState.Done))
-                .Select(a => a.Clone(a => a.InternalState.AddInternalState!.StagingExtentId = null));
+                .Select(a => a.Clone(
+                    a => a.InternalState.AddInternalState!.StagingExtentId = null));
 
             return newAdds;
         }
@@ -92,30 +93,42 @@ to table {_tableStatus.TableName}";
             {
                 Trace.WriteLine($"Removing {toRemove.Count()} blobs");
 
-                var properties = new ClientRequestProperties();
-                var data = toRemove
-                    .Zip(Enumerable.Range(0, toRemove.Count()), (r, i) => new { r, i })
-                    .Select(p => new
+                var blobPathsToRemove = toRemove.Select(b => b.BlobPath).ToHashSet();
+                var historicalAdds = _tableStatus.GetHistorical(_logs.StartTxId).Adds;
+                var data = historicalAdds
+                    .Zip(Enumerable.Range(0, historicalAdds.Count), (add, index) => new { add, index })
+                    .Where(a => blobPathsToRemove.Contains(a.add.BlobPath))
+                    .Select(a => new
                     {
-                        Index = p.i,
-                        BlobPath = p.r.BlobPath,
-                        IngestionTime = p.r.InternalState.AddInternalState!.IngestionTime
+                        ParameterName = $"IngestionTime{a.index}",
+                        BlobPath = a.add.BlobPath,
+                        IngestionTime = a.add.InternalState.AddInternalState!.IngestionTime
                     })
                     .ToImmutableArray();
+                var properties = new ClientRequestProperties();
+
+                Debug.Assert(
+                    data.Length == blobPathsToRemove.Count,
+                    "Couldn't find all past adds corresponding to removes");
 
                 //  Prepare parameters
                 foreach (var d in data)
                 {
-                    properties.SetParameter($"IngestionTime{d.Index}", (DateTime)d.IngestionTime!);
+                    properties.SetParameter($"{d.ParameterName}", (DateTime)d.IngestionTime!);
                 }
-                var blobQueriesText = data
+                var declareParamsListText = string.Join(
+                    ", ",
+                    data.Select(d => $"{d.ParameterName}:datetime"));
+                var declareParamsText = $"declare query_parameters({declareParamsListText});";
+                var blobQueriesListText = data
                     .Select(d => $"{_tableStatus.TableName} "
                     + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
-                    + $" and ingestion_time()=={d.IngestionTime}");
-                var allBlobQueryText =
-                    string.Join($"{Environment.NewLine}union ", blobQueriesText);
+                    + $" and ingestion_time()=={d.ParameterName}");
+                var blobQueryText =
+                    string.Join($"{Environment.NewLine}union ", blobQueriesListText);
                 var commandText = @$".delete table {_tableStatus.TableName} records <|
-{allBlobQueryText}";
+{declareParamsText}
+{blobQueryText}";
 
                 await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, properties, ct);
             }
