@@ -126,8 +126,8 @@ to table {_tableStatus.TableName}";
                     + $" and ingestion_time()=={d.ParameterName}");
                 var blobQueryText =
                     string.Join($"{Environment.NewLine}union ", blobQueriesListText);
-                var commandText = @$".delete table {_tableStatus.TableName} records <|
-{declareParamsText}
+                var commandText = @$"{declareParamsText}
+.delete table {_tableStatus.TableName} records <|
 {blobQueryText}";
 
                 await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, properties, ct);
