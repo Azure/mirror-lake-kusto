@@ -122,7 +122,7 @@ namespace MirrorLakeKusto.Orchestrations
             await LoadTransactionBatchAsync(startTxId, mainTable, stagingTable, ct);
             Trace.WriteLine(
                 $"Elapsed time for transaction batch {logs.AllItems.First().StartTxId} "
-                + "to {logs.AllItems.First().EndTxId}:  {stopwatch.Elapsed}");
+                + $"to {logs.AllItems.First().EndTxId}:  {stopwatch.Elapsed}");
         }
 
         private async Task LoadTransactionBatchAsync(
