@@ -105,32 +105,21 @@ to table {_tableStatus.TableName}";
                         IngestionTime = a.add.InternalState.AddInternalState!.IngestionTime
                     })
                     .ToImmutableArray();
-                var properties = new ClientRequestProperties();
 
                 Debug.Assert(
                     data.Length == blobPathsToRemove.Count,
                     "Couldn't find all past adds corresponding to removes");
 
-                //  Prepare parameters
-                foreach (var d in data)
-                {
-                    properties.SetParameter($"{d.ParameterName}", (DateTime)d.IngestionTime!);
-                }
-                var declareParamsListText = string.Join(
-                    ", ",
-                    data.Select(d => $"{d.ParameterName}:datetime"));
-                var declareParamsText = $"declare query_parameters({declareParamsListText});";
                 var blobQueriesListText = data
                     .Select(d => $"{_tableStatus.TableName} "
                     + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
-                    + $" and ingestion_time()=={d.ParameterName}");
+                    + $" and ingestion_time()==datetime({d.IngestionTime})");
                 var blobQueryText =
                     string.Join($"{Environment.NewLine}union ", blobQueriesListText);
-                var commandText = @$"{declareParamsText}
-.delete table {_tableStatus.TableName} records <|
+                var commandText = @$".delete table {_tableStatus.TableName} records <|
 {blobQueryText}";
 
-                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, properties, ct);
+                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
             }
 
             var newRemoves = toRemove

@@ -13,6 +13,7 @@ namespace MirrorLakeKusto.Storage
         public Guid? StagingExtentId { get; set; }
 
         /// <summary>Ingestion time of the blob.  Useful to time filter at deletion.</summary>
-        public DateTime? IngestionTime { get; set; }
+        /// <remarks>This is a string representation from Kusto.</remarks>
+        public string? IngestionTime { get; set; }
     }
 }

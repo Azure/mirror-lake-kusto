@@ -148,7 +148,7 @@ namespace MirrorLakeKusto.Orchestrations
             }
         }
 
-        private async Task<IImmutableDictionary<Uri, (Guid extentId, DateTime ingestionTime)>> ComputeExtentBlobMapAsync(
+        private async Task<IImmutableDictionary<Uri, (Guid extentId, string ingestionTime)>> ComputeExtentBlobMapAsync(
             IEnumerable<Guid> extentIds,
             CancellationToken ct)
         {
@@ -158,14 +158,14 @@ namespace MirrorLakeKusto.Orchestrations
 | summarize by
     ExtentId = extent_id(),
     BlobPath = {_stagingTable.BlobPathColumnName},
-    IngestionTime = ingestion_time()";
+    IngestionTime = tostring(ingestion_time())";
             var aggregateResults = await _databaseGateway.ExecuteQueryAsync(
                 queryText,
                 r => new
                 {
                     ExtentId = (Guid)r["ExtentId"],
                     BlobPath = (string)r["BlobPath"],
-                    IngestionTime = (DateTime)r["IngestionTime"]
+                    IngestionTime = (string)r["IngestionTime"]
                 },
                 ct);
             var map = aggregateResults
