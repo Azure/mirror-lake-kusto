@@ -3,6 +3,7 @@ using MirrorLakeKusto.Storage;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection.Metadata;
 using YamlDotNet.Core.Tokens;
 
@@ -10,6 +11,54 @@ namespace MirrorLakeKusto.Orchestrations
 {
     internal class BlobStagingOrchestration
     {
+        #region Inner types
+        private class PartitionValuesComparer
+            : IEqualityComparer<IImmutableDictionary<string, string>>
+        {
+            bool IEqualityComparer<IImmutableDictionary<string, string>>.Equals(
+                IImmutableDictionary<string, string>? x,
+                IImmutableDictionary<string, string>? y)
+            {
+                if ((x == null && y != null) || (x != null && y == null))
+                {
+                    return false;
+                }
+                else if (x == null || y == null)
+                {
+                    return true;
+                }
+                else if (x.Count != y.Count)
+                {
+                    return false;
+                }
+                else
+                {
+                    foreach (var pairX in x)
+                    {
+                        if (!y.TryGetValue(pairX.Key, out var valueY)
+                            || pairX.Value != valueY)
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+            }
+
+            int IEqualityComparer<IImmutableDictionary<string, string>>.GetHashCode(
+                IImmutableDictionary<string, string> obj)
+            {
+                //  XOR all hash codes
+                var hashcode = obj
+                    .Select(p => p.Key.GetHashCode() ^ p.Value.GetHashCode())
+                    .Aggregate((h1, h2) => h1 ^ h2);
+
+                return hashcode;
+            }
+        }
+        #endregion
+
         private static readonly TimeSpan DELAY_BETWEEN_PERSIST = TimeSpan.FromSeconds(5);
 
         private readonly DatabaseGateway _databaseGateway;
@@ -46,14 +95,19 @@ namespace MirrorLakeKusto.Orchestrations
         {
             var logs = tableStatus.GetBatch(startTxId);
             var itemsToIngest = logs.Adds;
+            var nonEmptyPartitions = itemsToIngest
+                .Where(i => i.PartitionValues != null)
+                .GroupBy(i => i.PartitionValues!, new PartitionValuesComparer());
+            var emptyPartition = itemsToIngest
+                .Where(i => i.PartitionValues == null);
 
             _databaseGateway = databaseGateway;
             _stagingTable = stagingTable;
             _tableStatus = tableStatus;
-            _itemsToIngest = new ConcurrentQueue<IEnumerable<TransactionItem>>(new[]
-                {
-                    itemsToIngest
-                });
+            _itemsToIngest = new ConcurrentQueue<IEnumerable<TransactionItem>>(
+                emptyPartition.Any()
+                ? nonEmptyPartitions.Append(emptyPartition)
+                : nonEmptyPartitions);
         }
         #endregion
 
@@ -187,6 +241,9 @@ namespace MirrorLakeKusto.Orchestrations
             var urlListText = string.Join(
                 ", " + Environment.NewLine,
                 urlList.Select(u => $"'{u};impersonate'"));
+            var sampleItem = items.First();
+            var ingestionMappingText = CreateIngestionMappingText(
+                sampleItem.PartitionValues!);
             var ingestionCommandText = @$"
 .ingest into table {_stagingTable.Name}
 (
@@ -194,7 +251,12 @@ namespace MirrorLakeKusto.Orchestrations
 ) with
 (
     format='parquet',
-    ingestionMappingReference='Mapping'
+    ingestionMapping=
+```
+[
+{ingestionMappingText}
+]
+```
 )";
             //  Ingest through Query Engine
             var ingestResults = await _databaseGateway.ExecuteCommandAsync(
@@ -209,7 +271,43 @@ namespace MirrorLakeKusto.Orchestrations
                 },
                 ct);
             var extentIds = ingestResults.Select(r => r.ExtentId).ToImmutableArray();
+
             return extentIds;
+        }
+
+        private string CreateIngestionMappingText(
+            IImmutableDictionary<string, string> partitionValues)
+        {
+            var simpleColumnsMappingText = _stagingTable.Columns
+                .Where(c => c.ColumnName != _stagingTable.BlobPathColumnName)
+                .Where(c => partitionValues == null
+                || !partitionValues.ContainsKey(c.ColumnName))
+                .Select(c => @$"{{""Column"": ""{c.ColumnName}"", 
+    ""Properties"": {{""Path"": ""$.{c.ColumnName}""}} }}");
+            var partitionColumnsMappingText = partitionValues
+                .Where(c => c.Value != null)
+                .Select(c => $@"{{
+    ""Column"": ""{c.Key}"",
+    ""Properties"":
+    {{
+        ""ConstValue"": ""{c.Value}""
+    }}
+}}");
+            var blobPathColumnMappingText = $@"{{
+    ""Column"": ""{_stagingTable.BlobPathColumnName}"",
+    ""Properties"":
+    {{
+        ""Path"": ""$.{_stagingTable.BlobPathColumnName}"",
+        ""Transform"": ""SourceLocation""
+    }}
+}}";
+            var combinedMappingText = string.Join(
+                ", ",
+                simpleColumnsMappingText
+                .Concat(partitionColumnsMappingText)
+                .Append(blobPathColumnMappingText));
+
+            return combinedMappingText;
         }
 
         private async Task<int> ComputePipelineWidthAsync(CancellationToken ct)

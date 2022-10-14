@@ -238,28 +238,6 @@ namespace MirrorLakeKusto.Orchestrations
 }}
 ```
 ";
-            var nonBlobPathColumnsMappingText = stagingTableSchema.Columns
-                .Where(c => c.ColumnName != stagingTableSchema.BlobPathColumnName)
-                .Select(c => @$"{{""Column"": ""{c.ColumnName}"", "
-                + @$"""Properties"": {{""Path"": ""$.{c.ColumnName}""}} }}");
-            var mappingText = $@"[
-    {string.Join(", ", nonBlobPathColumnsMappingText)},
-    {{
-        ""Column"": ""{stagingTableSchema.BlobPathColumnName}"",
-        ""Properties"":
-        {{
-            ""Path"": ""$.{stagingTableSchema.BlobPathColumnName}"",
-            ""Transform"": ""SourceLocation""
-        }}
-    }}
-]
-";
-            var ingestionMappingText = $@"
-.create table {stagingTableSchema.Name} ingestion parquet mapping ""Mapping""
-```
-{mappingText}
-```
-";
             //  Disable merge policy not to run after phantom extents
             var mergePolicyText = @$".alter table {stagingTableSchema.Name} policy merge
 ```
@@ -293,8 +271,6 @@ namespace MirrorLakeKusto.Orchestrations
 {createTableText}
 
 {batchingPolicyText}
-
-{ingestionMappingText}
 
 {retentionPolicyText}
 
