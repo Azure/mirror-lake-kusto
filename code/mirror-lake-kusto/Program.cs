@@ -96,13 +96,32 @@ namespace MirrorLakeKusto
             {
                 var result = parser.ParseArguments<CommandLineOptions>(args);
 
-                await result
-                    .WithNotParsed(errors => HandleParseError(result, errors))
-                    .WithParsedAsync(async options => await RunOptionsAsync(options, sessionId));
+                if (ValidateCommandLineOptions(result.Value))
+                {
+                    await result
+                        .WithNotParsed(errors => HandleParseError(result, errors))
+                        .WithParsedAsync(async options => await RunOptionsAsync(options, sessionId));
 
-                return result.Tag == ParserResultType.Parsed
-                    ? 0
-                    : 1;
+                    return result.Tag == ParserResultType.Parsed
+                        ? 0
+                        : 1;
+                }
+                else
+                {
+                    var helpText = HelpText.AutoBuild(result, h =>
+                    {
+                        h.AutoVersion = false;
+                        h.Copyright = string.Empty;
+                        h.Heading = string.Empty;
+
+                        return HelpText.DefaultParsingErrorsHandler(result, h);
+                    }, example => example);
+
+                    Console.WriteLine(helpText);
+
+                    return 1;
+                }
+
             }
             catch (MirrorException ex)
             {
@@ -122,6 +141,42 @@ namespace MirrorLakeKusto
             {
                 Console.Out.Flush();
             }
+        }
+
+        private static bool ValidateCommandLineOptions(CommandLineOptions options)
+        {
+            if (options.ClusterIngestionConnectionString != null)
+            {
+                Console.WriteLine("Missing cluster ingestion connection string");
+
+                return false;
+            }
+            if (options.Database != null)
+            {
+                Console.WriteLine("Missing Kusto database");
+
+                return false;
+            }
+            if (options.KustoTable != null)
+            {
+                Console.WriteLine("Missing Kusto database");
+
+                return false;
+            }
+            if (options.DeltaTableStorageUrl != null)
+            {
+                Console.WriteLine("Missing delta table storage URL");
+
+                return false;
+            }
+            if (options.CheckpointBlobUrl != null)
+            {
+                Console.WriteLine("Missing checkpoint information");
+
+                return false;
+            }
+
+            return true;
         }
 
         private static void HandleParseError(
