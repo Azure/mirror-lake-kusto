@@ -8,7 +8,7 @@ using MirrorLakeKusto.Storage.DeltaLake;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
-namespace MirrorLakeKusto
+namespace MirrorLakeKusto.Orchestrations
 {
     internal class MirrorOrchestration : IAsyncDisposable
     {

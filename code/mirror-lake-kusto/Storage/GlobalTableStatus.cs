@@ -20,7 +20,7 @@ namespace MirrorLakeKusto.Storage
             long StartTxId,
             long EndTxId,
             TransactionItemAction Action,
-            string? BlobPath);
+            Uri? BlobPath);
 
         private class TableItemIndex
         {

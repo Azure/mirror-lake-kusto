@@ -425,7 +425,7 @@ namespace MirrorLakeKustoTest
             var tenantId = GetEnvironmentVariable("mlkTenantId");
             var appId = GetEnvironmentVariable("mlkSpId");
             var appSecret = GetEnvironmentVariable("mlkSpSecret");
-            var ingestionConnectionString = $"Data Source={_ingestionUri};"
+            var ingestionConnectionString = $"Data Source={_ingestionUri};Fed=true;"
                 + $"Application Client Id={appId};Application Key={appSecret};"
                 + $"Authority Id={tenantId}";
             return ingestionConnectionString;

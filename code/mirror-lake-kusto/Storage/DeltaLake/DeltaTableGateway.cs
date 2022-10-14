@@ -244,6 +244,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                     txId,
                     kustoDatabaseName,
                     kustoTableName,
+                    DeltaTableStorageUrl,
                     blobText);
             }
             catch (Exception ex)
@@ -303,6 +304,7 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 checkpointTxId,
                 kustoDatabaseName,
                 kustoTableName,
+                DeltaTableStorageUrl,
                 parquetResult.Value.Content.ToStream());
 
             return log;

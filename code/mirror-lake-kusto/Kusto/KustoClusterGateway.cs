@@ -1,4 +1,5 @@
-﻿using Kusto.Data;
+﻿using CommandLine;
+using Kusto.Data;
 using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
 using Kusto.Ingest;
@@ -14,6 +15,9 @@ namespace MirrorLakeKusto.Kusto
 {
     public class KustoClusterGateway
     {
+        private readonly static ClientRequestProperties EMPTY_REQUEST_PROPERTIES =
+            new ClientRequestProperties();
+
         private readonly ICslQueryProvider _queryProvider;
         private readonly ICslAdminProvider _commandProvider;
         private readonly IKustoQueuedIngestClient _ingestionProvider;
@@ -33,8 +37,8 @@ namespace MirrorLakeKusto.Kusto
 
             if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
             {   //  Enforce Az CLI authentication if user simply provides cluster ingestion URI
-                ingestionStringBuilder = ingestionStringBuilder.WithAadAzCliAuthentication(false);
-                queryStringBuilder = queryStringBuilder.WithAadAzCliAuthentication(false);
+                ingestionStringBuilder = ingestionStringBuilder.WithAadAzCliAuthentication(true);
+                queryStringBuilder = queryStringBuilder.WithAadAzCliAuthentication(true);
             }
 
             var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
@@ -113,17 +117,34 @@ namespace MirrorLakeKusto.Kusto
             Func<IDataRecord, T> projection,
             CancellationToken ct)
         {
+            return await ExecuteQueryAsync<T>(
+                database,
+                queryText,
+                projection,
+                EMPTY_REQUEST_PROPERTIES,
+                ct);
+        }
+        
+        public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
+            string database,
+            string queryText,
+            Func<IDataRecord, T> projection,
+            ClientRequestProperties properties,
+            CancellationToken ct)
+        {
             try
             {
                 using (var reader = await _queryProvider.ExecuteQueryAsync(
                     database,
                     queryText,
                     _requestOptions != null
-                    ? new ClientRequestProperties(_requestOptions, null)
+                    ? new ClientRequestProperties(
+                        _requestOptions.Concat(properties.Options),
+                        properties.Parameters)
                     {
                         Application = _application
                     }
-                    : null))
+                    : properties))
                 {
                     var output = Project(reader, projection)
                         .ToImmutableArray();
@@ -145,17 +166,34 @@ namespace MirrorLakeKusto.Kusto
             Func<IDataRecord, T> projection,
             CancellationToken ct)
         {
+            return await ExecuteCommandAsync<T>(
+                database,
+                commandText,
+                projection,
+                EMPTY_REQUEST_PROPERTIES,
+                ct);
+        }
+        
+        public async Task<IImmutableList<T>> ExecuteCommandAsync<T>(
+            string database,
+            string commandText,
+            Func<IDataRecord, T> projection,
+            ClientRequestProperties properties,
+            CancellationToken ct)
+        {
             try
             {
                 using (var reader = await _commandProvider.ExecuteControlCommandAsync(
                     database,
                     commandText,
                     _requestOptions != null
-                    ? new ClientRequestProperties(_requestOptions, null)
+                    ? new ClientRequestProperties(
+                        _requestOptions.Concat(properties.Options),
+                        properties.Parameters)
                     {
                         Application = _application
                     }
-                    : null))
+                    : properties))
                 {
                     var output = Project(reader, projection)
                         .ToImmutableArray();

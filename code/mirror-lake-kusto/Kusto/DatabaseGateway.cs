@@ -11,7 +11,7 @@ namespace MirrorLakeKusto.Kusto
     {
         private const string STATUS_VIEW_NAME = "MLK_DeltaStatusRaw";
         private const string STATUS_LATEST_VIEW_NAME = "MLK_DeltaStatus";
-
+        
         private readonly KustoClusterGateway _clusterGateway;
 
         public DatabaseGateway(KustoClusterGateway clusterGateway, string database)
@@ -34,6 +34,20 @@ namespace MirrorLakeKusto.Kusto
                 ct);
         }
 
+        public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
+            string queryText,
+            Func<IDataRecord, T> projection,
+            ClientRequestProperties properties,
+            CancellationToken ct)
+        {
+            return await _clusterGateway.ExecuteQueryAsync(
+                DatabaseName,
+                queryText,
+                projection,
+                properties,
+                ct);
+        }
+
         public async Task<IImmutableList<T>> ExecuteCommandAsync<T>(
             string commandText,
             Func<IDataRecord, T> projection,
@@ -43,6 +57,20 @@ namespace MirrorLakeKusto.Kusto
                 DatabaseName,
                 commandText,
                 projection,
+                ct);
+        }
+
+        public async Task<IImmutableList<T>> ExecuteCommandAsync<T>(
+            string commandText,
+            Func<IDataRecord, T> projection,
+            ClientRequestProperties properties,
+            CancellationToken ct)
+        {
+            return await _clusterGateway.ExecuteCommandAsync(
+                DatabaseName,
+                commandText,
+                projection,
+                properties,
                 ct);
         }
 

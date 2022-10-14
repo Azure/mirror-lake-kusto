@@ -79,6 +79,17 @@ namespace MirrorLakeKusto.Storage
             return new TransactionLog(batchItems);
         }
 
+        public TransactionLog GetHistorical(long beforeTxId)
+        {
+            var logs = _statuses
+                .Where(s => s.EndTxId < beforeTxId)
+                .GroupBy(s => s.StartTxId)
+                .Select(g => new TransactionLog(g));
+            var log = TransactionLog.Coalesce(logs);
+
+            return log;
+        }
+
         public TableDefinition GetTableDefinition(long upToTxId)
         {
             var schemaItem = _statuses
@@ -91,32 +102,12 @@ namespace MirrorLakeKusto.Storage
             {
                 throw new MirrorException("No schema defined in transactions");
             }
-            if (schemaItem.Schema == null
-                || schemaItem.PartitionColumns == null)
+            if (schemaItem.Schema == null || schemaItem.PartitionColumns == null)
             {
                 throw new MirrorException("No schema or partition columns in the schema item");
             }
 
             return new TableDefinition(TableName, schemaItem.Schema, schemaItem.PartitionColumns);
-        }
-
-        public TransactionLog Refresh(TransactionLog log)
-        {
-            var startTxId = log.StartTxId;
-            var endTxId = log.EndTxId;
-            var batchItems = _statuses
-                .Where(s => s.StartTxId == startTxId);
-            var logs = new TransactionLog(batchItems);
-
-            foreach (var item in logs.AllItems)
-            {
-                if (item.EndTxId != endTxId)
-                {
-                    throw new InvalidOperationException("Invalid End transaction ID");
-                }
-            }
-
-            return new TransactionLog(batchItems);
         }
 
         public async Task PersistNewItemsAsync(
