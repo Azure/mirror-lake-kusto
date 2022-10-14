@@ -145,31 +145,31 @@ namespace MirrorLakeKusto
 
         private static bool ValidateCommandLineOptions(CommandLineOptions options)
         {
-            if (options.ClusterIngestionConnectionString != null)
+            if (string.IsNullOrWhiteSpace(options.ClusterIngestionConnectionString))
             {
                 Console.WriteLine("Missing cluster ingestion connection string");
 
                 return false;
             }
-            if (options.Database != null)
+            if (string.IsNullOrWhiteSpace(options.Database))
             {
                 Console.WriteLine("Missing Kusto database");
 
                 return false;
             }
-            if (options.KustoTable != null)
+            if (string.IsNullOrWhiteSpace(options.KustoTable))
             {
                 Console.WriteLine("Missing Kusto database");
 
                 return false;
             }
-            if (options.DeltaTableStorageUrl != null)
+            if (string.IsNullOrWhiteSpace(options.DeltaTableStorageUrl))
             {
                 Console.WriteLine("Missing delta table storage URL");
 
                 return false;
             }
-            if (options.CheckpointBlobUrl != null)
+            if (string.IsNullOrWhiteSpace(options.CheckpointBlobUrl))
             {
                 Console.WriteLine("Missing checkpoint information");
 

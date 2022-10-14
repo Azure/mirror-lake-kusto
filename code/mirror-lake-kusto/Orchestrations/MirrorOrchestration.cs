@@ -85,7 +85,7 @@ namespace MirrorLakeKusto.Orchestrations
         {
             if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
             {   //  Default, if no credentials are provided
-                return new AzureCliCredential();
+                return new DefaultAzureCredential();
             }
             else
             {
