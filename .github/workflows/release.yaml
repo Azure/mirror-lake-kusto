@@ -48,10 +48,10 @@ jobs:
       run:  |
         cd linux-assets/bin
         tar -czvf ../../final-assets/mirror-lake-kusto-linux.tar.gz *
-    # - name: Zip Mac executable
-    #   run:  |
-    #     cd mac-assets/bin
-    #     tar -czvf ../../final-assets/mirror-lake-mac.tar.gz *
+    - name: Zip Mac executable
+      run:  |
+        cd mac-assets/bin
+        tar -czvf ../../final-assets/mirror-lake-mac.tar.gz *
     # - name: Zip Windows executable
     #   run:  |
     #     cd windows-assets/bin
