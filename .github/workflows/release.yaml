@@ -77,6 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
+      # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
       dotnetOs:  linux-x64
       assetsName:  linux-assets
       assetSuffix:  linux
@@ -136,12 +137,13 @@ jobs:
   # Mac job
   mac:
 
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     
     env:
-      dotnetOs:  linux-x64
-      assetsName:  linux-assets
-      assetSuffix:  linux
+      # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
+      dotnetOs:  osx-x64
+      assetsName:  mac-assets
+      assetSuffix:  mac
       execName:  mirror-lake-kusto
 
     steps:
