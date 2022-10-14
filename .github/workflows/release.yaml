@@ -13,8 +13,8 @@ jobs:
     # This integrates the artefacts from the other jobs
     needs:
     - linux
-    - mac
     # - windows
+    # - mac
     runs-on: ubuntu-latest
     steps:
     # We do not need the source code but we need git for tags & release
@@ -28,19 +28,19 @@ jobs:
     #   with:
     #     name: windows-assets
     #     path: windows-assets
-    - uses: actions/download-artifact@master
-      with:
-        name: mac-assets
-        path: mac-assets
-    Validate asset content
+    # - uses: actions/download-artifact@master
+    #   with:
+    #     name: mac-assets
+    #     path: mac-assets
+    # Validate asset content
     - name: Assets content
       run:  |
         ls -l linux-assets
         ls -l linux-assets/bin
         # ls -l windows-assets
         # ls -l windows-assets/bin
-        ls -l mac-assets
-        ls -l mac-assets/bin
+        # ls -l mac-assets
+        # ls -l mac-assets/bin
     # Zip assets
     - name: Mkdir final assets
       run:  mkdir final-assets
@@ -48,10 +48,10 @@ jobs:
       run:  |
         cd linux-assets/bin
         tar -czvf ../../final-assets/mirror-lake-kusto-linux.tar.gz *
-    - name: Zip Mac executable
-      run:  |
-        cd mac-assets/bin
-        tar -czvf ../../final-assets/mirror-lake-mac.tar.gz *
+    # - name: Zip Mac executable
+    #   run:  |
+    #     cd mac-assets/bin
+    #     tar -czvf ../../final-assets/mirror-lake-mac.tar.gz *
     # - name: Zip Windows executable
     #   run:  |
     #     cd windows-assets/bin
@@ -73,6 +73,7 @@ jobs:
 
   # Linux job, builds the Linux asset
   linux:
+
     runs-on: ubuntu-latest
     
     env:
@@ -131,4 +132,3 @@ jobs:
       with:
         name: ${{ env.assetsName }}
         path: ${{ env.assetsName }}
-
