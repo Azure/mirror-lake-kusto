@@ -81,7 +81,7 @@ jobs:
       dotnetOs:  linux-x64
       assetsName:  linux-assets
       assetSuffix:  linux
-      execName:  mirror-lake-kusto
+      execName:  mlk
 
     steps:
     - uses: actions/checkout@v2
@@ -144,7 +144,7 @@ jobs:
       dotnetOs:  osx-x64
       assetsName:  mac-assets
       assetSuffix:  mac
-      execName:  mirror-lake-kusto
+      execName:  mlk
 
     steps:
     - uses: actions/checkout@v2
