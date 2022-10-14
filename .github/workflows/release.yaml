@@ -51,11 +51,11 @@ jobs:
     - name: Zip Mac executable
       run:  |
         cd mac-assets/bin
-        tar -czvf ../../final-assets/mirror-lake-mac.tar.gz *
+        tar -czvf ../../final-assets/mirror-lake-kusto-mac.tar.gz *
     # - name: Zip Windows executable
     #   run:  |
     #     cd windows-assets/bin
-    #     tar -czvf ../../final-assets/mirror-lake-windows.tar.gz *
+    #     tar -czvf ../../final-assets/mirror-lake-kusto-windows.tar.gz *
     # Validate final assets
     - name: Final assets content
       run:  ls -l final-assets
