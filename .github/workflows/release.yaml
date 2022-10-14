@@ -28,10 +28,10 @@ jobs:
     #   with:
     #     name: windows-assets
     #     path: windows-assets
-    # - uses: actions/download-artifact@master
-    #   with:
-    #     name: mac-assets
-    #     path: mac-assets
+    - uses: actions/download-artifact@master
+      with:
+        name: mac-assets
+        path: mac-assets
     # Validate asset content
     - name: Assets content
       run:  |
