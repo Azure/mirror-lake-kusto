@@ -13,8 +13,8 @@ jobs:
     # This integrates the artefacts from the other jobs
     needs:
     - linux
-    # - windows
     - mac
+    # - windows
     runs-on: ubuntu-latest
     steps:
     # We do not need the source code but we need git for tags & release
