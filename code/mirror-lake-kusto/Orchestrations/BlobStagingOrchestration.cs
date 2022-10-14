@@ -49,12 +49,19 @@ namespace MirrorLakeKusto.Orchestrations
             int IEqualityComparer<IImmutableDictionary<string, string>>.GetHashCode(
                 IImmutableDictionary<string, string> obj)
             {
-                //  XOR all hash codes
-                var hashcode = obj
-                    .Select(p => p.Key.GetHashCode() ^ p.Value.GetHashCode())
-                    .Aggregate((h1, h2) => h1 ^ h2);
+                if (obj.Any())
+                {
+                    //  XOR all hash codes
+                    var hashcode = obj
+                        .Select(p => p.Key.GetHashCode() ^ p.Value.GetHashCode())
+                        .Aggregate((h1, h2) => h1 ^ h2);
 
-                return hashcode;
+                    return hashcode;
+                }
+                else
+                {
+                    return 0;
+                }
             }
         }
         #endregion
