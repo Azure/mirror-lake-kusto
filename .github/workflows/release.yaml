@@ -73,7 +73,6 @@ jobs:
 
   # Linux job, builds the Linux asset
   linux:
-
     runs-on: ubuntu-latest
     
     env:
@@ -135,7 +134,6 @@ jobs:
 
   # Mac OS job, builds the Mac OS asset
   mac:
-
     runs-on: macos-latest
     
     env:
