@@ -140,7 +140,7 @@ namespace MirrorLakeKusto.Orchestrations
         {
             while (!_ingestionQueueTask.Task.IsCompleted)
             {   //  First sleep a little
-                await Task.WhenAll(_ingestionQueueTask.Task, Task.Delay(DELAY_BETWEEN_PERSIST));
+                await Task.WhenAny(_ingestionQueueTask.Task, Task.Delay(DELAY_BETWEEN_PERSIST));
 
                 await PersistStatusAsync(ct);
             }
