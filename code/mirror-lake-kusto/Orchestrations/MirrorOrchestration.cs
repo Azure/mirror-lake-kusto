@@ -26,17 +26,12 @@ namespace MirrorLakeKusto.Orchestrations
             string? requestDescription,
             CancellationToken ct)
         {
-            Trace.TraceInformation("Initialize Storage connections...");
-
             var storageCredentials =
                 CreateNonSasStorageCredentials(parameters.ClusterIngestionConnectionString);
-            var globalTableStatus = await GlobalTableStatus.RetrieveAsync(
+            var globalTableStatusTask = GlobalTableStatus.RetrieveAsync(
                 parameters.CheckpointBlobUrl,
                 storageCredentials,
                 ct);
-
-            Trace.TraceInformation("Initialize Kusto Cluster connections...");
-
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.ClusterIngestionConnectionString,
                 version,
@@ -51,6 +46,7 @@ namespace MirrorLakeKusto.Orchestrations
                     Tables = g
                 })
                 .ToImmutableArray();
+            var globalTableStatus = await globalTableStatusTask;
             var orchestrations = new List<DeltaTableOrchestration>();
 
             foreach (var db in databaseGroups)
