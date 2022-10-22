@@ -169,9 +169,9 @@ namespace MirrorLakeKusto
 
                 return false;
             }
-            if (string.IsNullOrWhiteSpace(options.CheckpointBlobUrl))
+            if (string.IsNullOrWhiteSpace(options.CheckpointBlobFolderUrl))
             {
-                Console.WriteLine("Missing checkpoint information");
+                Console.WriteLine("Missing checkpoint blob folder information");
 
                 return false;
             }

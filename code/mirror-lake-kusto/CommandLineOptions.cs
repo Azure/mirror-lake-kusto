@@ -13,8 +13,8 @@ namespace MirrorLakeKusto
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after first batch")]
         public bool ContinuousRun { get; set; } = false;
 
-        [Option('c', "checkpoint", Required = false, HelpText = "Checkpoint CSV blob URL")]
-        public string CheckpointBlobUrl { get; set; } = string.Empty;
+        [Option('c', "checkpoint", Required = false, HelpText = "Checkpoint CSV blob folder URL")]
+        public string CheckpointBlobFolderUrl { get; set; } = string.Empty;
 
         [Option('s', "storage", Required = false, HelpText = "Delta Table Storage URL")]
         public string DeltaTableStorageUrl { get; set; } = string.Empty;
