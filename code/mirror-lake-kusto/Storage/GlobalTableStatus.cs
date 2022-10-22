@@ -50,12 +50,12 @@ namespace MirrorLakeKusto.Storage
 
         #region Constructors
         public static async Task<GlobalTableStatus> RetrieveAsync(
-            Uri checkpointBlobUrl,
+            Uri checkpointBlobFolderUrl,
             TokenCredential credential,
             CancellationToken ct)
         {
             var bookmarkGateway = await BookmarkGateway.CreateAsync(
-                checkpointBlobUrl,
+                checkpointBlobFolderUrl,
                 credential,
                 false,
                 ct);
