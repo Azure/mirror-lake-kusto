@@ -72,14 +72,17 @@ namespace MirrorLakeKusto.Storage
             var itemByTableName = dedupItems
                 .GroupBy(i => i.KustoTableName)
                 .ToImmutableDictionary(g => g.Key);
+            var noItems = ImmutableArray<TransactionItem>.Empty;
 
             _orphanItems = itemByTableName
                 .Where(p => !tableNames.Contains(p.Key))
                 .SelectMany(p => p.Value)
                 .ToImmutableArray();
-            _tableStatusIndex = itemByTableName
-                .Where(p => tableNames.Contains(p.Key))
-                .Select(p => new TableStatus(this, p.Key, p.Value))
+            _tableStatusIndex = tableNames
+                .Select(t => new TableStatus(
+                    this,
+                    t,
+                    itemByTableName.ContainsKey(t) ? itemByTableName[t] : noItems))
                 .ToImmutableDictionary(s => s.TableName, s => s);
         }
         #endregion
@@ -88,7 +91,7 @@ namespace MirrorLakeKusto.Storage
         {
             get
             {
-                if(_tableStatusIndex.TryGetValue(table, out var tableStatus))
+                if (_tableStatusIndex.TryGetValue(table, out var tableStatus))
                 {
                     return tableStatus;
                 }

@@ -518,20 +518,27 @@ namespace MirrorLakeKusto.Storage
             byte[] buffer,
             bool validateHeader)
         {
-            using (var stream = new MemoryStream(buffer))
-            using (var reader = new StreamReader(stream))
-            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            if (!buffer.Any())
             {
-                csv.Context.RegisterClassMap<TransactionItemMap>();
-                if (validateHeader)
+                return ImmutableArray<TransactionItem>.Empty;
+            }
+            else
+            {
+                using (var stream = new MemoryStream(buffer))
+                using (var reader = new StreamReader(stream))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
                 {
-                    csv.Read();
-                    csv.ReadHeader();
-                    csv.ValidateHeader<TransactionItem>();
-                }
-                var items = csv.GetRecords<TransactionItem>();
+                    csv.Context.RegisterClassMap<TransactionItemMap>();
+                    if (validateHeader)
+                    {
+                        csv.Read();
+                        csv.ReadHeader();
+                        csv.ValidateHeader<TransactionItem>();
+                    }
+                    var items = csv.GetRecords<TransactionItem>();
 
-                return items.ToImmutableArray();
+                    return items.ToImmutableArray();
+                }
             }
         }
 
