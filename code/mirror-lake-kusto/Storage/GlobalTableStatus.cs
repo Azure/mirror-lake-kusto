@@ -1,9 +1,11 @@
 ﻿using Azure.Core;
+using Microsoft.Identity.Client.Platforms.Features.DesktopOs.Kerberos;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,13 +15,12 @@ namespace MirrorLakeKusto.Storage
     internal class GlobalTableStatus
     {
         private const string CHECKPOINT_BLOB = "index.csv";
-        private const string TEMP_CHECKPOINT_BLOB = "temp-index.csv";
 
-        private readonly CheckpointGateway _checkpointGateway;
         //  Items not belonging to any of the "planned" tables
         //  Typically those would be from a past run and we'll keep them around
         private readonly IImmutableList<TransactionItem> _orphanItems;
         private readonly IImmutableDictionary<string, TableStatus> _tableStatusIndex;
+        private CheckpointGateway _checkpointGateway;
 
         #region Constructors
         public static async Task<GlobalTableStatus> RetrieveAsync(
@@ -64,8 +65,6 @@ namespace MirrorLakeKusto.Storage
             IEnumerable<string> tableNames,
             IEnumerable<TransactionItem> items)
         {
-            _checkpointGateway = checkpointGateway;
-
             var dedupItems = items
                 .GroupBy(i => i.GetItemKey())
                 .Select(g => g.Last());
@@ -84,6 +83,8 @@ namespace MirrorLakeKusto.Storage
                     t,
                     itemByTableName.ContainsKey(t) ? itemByTableName[t] : noItems))
                 .ToImmutableDictionary(s => s.TableName, s => s);
+        
+            _checkpointGateway = checkpointGateway;
         }
         #endregion
 
@@ -117,9 +118,48 @@ namespace MirrorLakeKusto.Storage
             await _checkpointGateway.WriteAsync(itemsContent, ct);
         }
 
-        private Task CompactAsync(CancellationToken ct)
+        private async Task CompactAsync(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            const long MAX_LENGTH = 4000000;
+
+            var tempCheckpointGateway =
+                await _checkpointGateway.GetTemporaryCheckpointGatewayAsync(ct);
+            var allItems = _tableStatusIndex.Values
+                .Select(s => s.AllStatus)
+                .Prepend(_orphanItems)
+                .SelectMany(s => s);
+
+            using (var stream = new MemoryStream())
+            {
+                var headerBuffer = TransactionItem.HeaderToCsv();
+
+                stream.Write(headerBuffer, 0, headerBuffer.Length);
+
+                foreach (var item in allItems)
+                {
+                    var positionBefore = stream.Position;
+
+                    item.ToCsv(stream);
+
+                    var positionAfter = stream.Position;
+
+                    if (positionAfter > MAX_LENGTH)
+                    {
+                        stream.SetLength(positionBefore);
+                        stream.Flush();
+                        await tempCheckpointGateway.WriteAsync(stream.GetBuffer(), ct);
+                        stream.SetLength(0);
+                        item.ToCsv(stream);
+                    }
+                }
+                if (stream.Position > 0)
+                {
+                    stream.Flush();
+                    await tempCheckpointGateway.WriteAsync(stream.GetBuffer(), ct);
+                }
+            }
+
+            _checkpointGateway = tempCheckpointGateway;
         }
     }
 }

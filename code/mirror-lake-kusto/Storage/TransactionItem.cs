@@ -455,6 +455,33 @@ namespace MirrorLakeKusto.Storage
             return clone;
         }
 
+        public void ToCsv(Stream stream)
+        {
+            using (var writer = new StreamWriter(stream, leaveOpen: true))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            {
+                csv.Context.RegisterClassMap<TransactionItemMap>();
+                csv.WriteRecord(this);
+                csv.NextRecord();
+                csv.Flush();
+                writer.Flush();
+            }
+        }
+
+        public static byte[] ToCsv(IEnumerable<TransactionItem> items)
+        {
+            using(var stream = new MemoryStream())
+            {
+                foreach(var i in items)
+                {
+                    i.ToCsv(stream);
+                }
+                stream.Flush();
+
+                return stream.GetBuffer();
+            }
+        }
+
         public static ReadOnlyMemory<byte> GetCsvHeader()
         {
             using (var stream = new MemoryStream())
@@ -482,28 +509,6 @@ namespace MirrorLakeKusto.Storage
             {
                 csv.Context.RegisterClassMap<TransactionItemMap>();
                 csv.WriteHeader<TransactionItem>();
-                csv.Flush();
-                writer.Flush();
-                stream.Flush();
-
-                var buffer = stream.ToArray();
-
-                return buffer;
-            }
-        }
-
-        public static byte[] ToCsv(IEnumerable<TransactionItem> items)
-        {
-            using (var stream = new MemoryStream())
-            using (var writer = new StreamWriter(stream))
-            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
-            {
-                csv.Context.RegisterClassMap<TransactionItemMap>();
-                foreach (var item in items)
-                {
-                    csv.WriteRecord(item);
-                    csv.NextRecord();
-                }
                 csv.Flush();
                 writer.Flush();
                 stream.Flush();

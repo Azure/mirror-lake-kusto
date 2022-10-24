@@ -33,6 +33,8 @@ namespace MirrorLakeKusto.Storage
 
         public string TableName { get; }
 
+        public IEnumerable<TransactionItem> AllStatus => _statuses.Values;
+
         public bool IsBatchIncomplete
         {
             get
