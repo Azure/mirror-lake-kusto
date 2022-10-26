@@ -90,8 +90,8 @@ externaldata({TransactionItem.ExternalTableSchema})
    '{checkpointBlobUrl};impersonate'
 ]
 with(format='csv', ignoreFirstRecord=true)
-| summarize arg_max(MirrorTimestamp, *) by KustoDatabaseName, KustoTableName, StartTxId, Action, BlobPath
-| order by KustoDatabaseName asc, KustoTableName asc, StartTxId asc, Action asc, BlobPath asc
+| summarize arg_max(MirrorTimestamp, *) by KustoTableName, StartTxId, Action, BlobPath
+| order by KustoTableName asc, StartTxId asc, Action asc, BlobPath asc
 | project {columnListText}
 }}";
             var commandText = $@".execute database script with (ContinueOnErrors=false, ThrowOnErrors=true)<|

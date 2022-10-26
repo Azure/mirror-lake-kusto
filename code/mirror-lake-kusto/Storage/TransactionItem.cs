@@ -21,7 +21,7 @@ namespace MirrorLakeKusto.Storage
                     WriteIndented = false
                 });
 
-        public static string ExternalTableSchema => "KustoDatabaseName:string, KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, PartitionColumns:dynamic, Schema:dynamic, InternalState:dynamic";
+        public static string ExternalTableSchema => "KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, PartitionColumns:dynamic, Schema:dynamic, InternalState:dynamic";
 
         #region Inner types
         internal record ItemKey(
