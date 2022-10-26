@@ -16,6 +16,7 @@ namespace MirrorLakeKusto.Storage
         private const string TEMP_CHECKPOINT_BLOB = "temp-index.csv";
 
         private readonly AppendBlobClient _blobClient;
+        private volatile int _blockCount = 0;
 
         public CheckpointGateway(Uri blobUri, TokenCredential credential)
         {
@@ -33,6 +34,10 @@ namespace MirrorLakeKusto.Storage
         {
             _blobClient = blobClient;
         }
+
+        public Uri BlobUri => _blobClient.Uri;
+
+        public bool CanWrite => _blockCount < 50000;
 
         public async Task<bool> ExistsAsync(CancellationToken ct)
         {
@@ -78,6 +83,7 @@ namespace MirrorLakeKusto.Storage
             {
                 await _blobClient.AppendBlockAsync(stream, cancellationToken: ct);
             }
+            Interlocked.Increment(ref _blockCount);
         }
     }
 }

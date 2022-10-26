@@ -83,10 +83,12 @@ namespace MirrorLakeKusto.Storage
                     t,
                     itemByTableName.ContainsKey(t) ? itemByTableName[t] : noItems))
                 .ToImmutableDictionary(s => s.TableName, s => s);
-        
+
             _checkpointGateway = checkpointGateway;
         }
         #endregion
+
+        public Uri CheckpointUri => _checkpointGateway.BlobUri;
 
         public TableStatus this[string table]
         {
@@ -115,7 +117,10 @@ namespace MirrorLakeKusto.Storage
                 throw new ArgumentException("Is empty", nameof(items));
             }
 
-            await _checkpointGateway.WriteAsync(itemsContent, ct);
+            if (_checkpointGateway.CanWrite)
+            {
+                await _checkpointGateway.WriteAsync(itemsContent, ct);
+            }
         }
 
         private async Task CompactAsync(CancellationToken ct)

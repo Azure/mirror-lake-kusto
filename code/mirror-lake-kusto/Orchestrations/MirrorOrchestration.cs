@@ -54,7 +54,7 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 Trace.TraceInformation($"Initialize Database '{db.Gateway.DatabaseName}' schemas...");
                 await db.Gateway.CreateMergeDatabaseObjectsAsync(
-                    parameters.CheckpointBlobFolderUrl,
+                    globalTableStatus.CheckpointUri,
                     ct);
                 Trace.TraceInformation($"Read Database '{db.Gateway.DatabaseName}' status...");
 
