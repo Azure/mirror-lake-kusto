@@ -1,10 +1,12 @@
 ﻿using Azure.Core;
+using CsvHelper;
 using Microsoft.Identity.Client.Platforms.Features.DesktopOs.Kerberos;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -36,6 +38,7 @@ namespace MirrorLakeKusto.Storage
             if (!(await checkpointGateway.ExistsAsync(ct)))
             {
                 await checkpointGateway.CreateAsync(ct);
+                await PersistItemsAsync(checkpointGateway, new TransactionItem[0], true, ct);
 
                 return new GlobalTableStatus(
                     checkpointGateway,
@@ -50,7 +53,7 @@ namespace MirrorLakeKusto.Storage
                 //  Ensure it's an append blob + compact it
                 Trace.TraceInformation("Rewrite checkpoint blob...");
 
-                var items = TransactionItem.FromCsv(buffer, true);
+                IImmutableList<TransactionItem> items = ParseCsv(buffer);
                 var globalTableStatus =
                     new GlobalTableStatus(checkpointGateway, tableNames, items);
 
@@ -110,41 +113,48 @@ namespace MirrorLakeKusto.Storage
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
         {
-            var itemsContent = TransactionItem.ToCsv(items);
-
-            if (itemsContent.Length == 0)
+            if (items.Count() == 0)
             {
                 throw new ArgumentException("Is empty", nameof(items));
             }
 
             if (_checkpointGateway.CanWrite)
             {
-                await _checkpointGateway.WriteAsync(itemsContent, ct);
+                await PersistItemsAsync(_checkpointGateway, items, false, ct);
+            }
+            else
+            {
+                await CompactAsync(ct);
+                await PersistNewItemsAsync(items, ct);
             }
         }
 
-        private async Task CompactAsync(CancellationToken ct)
+        private async static Task PersistItemsAsync(
+            CheckpointGateway checkpointGateway,
+            IEnumerable<TransactionItem> items,
+            bool persistHeaders,
+            CancellationToken ct)
         {
             const long MAX_LENGTH = 4000000;
 
-            var tempCheckpointGateway =
-                await _checkpointGateway.GetTemporaryCheckpointGatewayAsync(ct);
-            var allItems = _tableStatusIndex.Values
-                .Select(s => s.AllStatus)
-                .Prepend(_orphanItems)
-                .SelectMany(s => s);
-
             using (var stream = new MemoryStream())
+            using (var writer = new StreamWriter(stream))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                var headerBuffer = TransactionItem.HeaderToCsv();
+                TransactionItem.RegisterClassMap(csv.Context);
+                if (persistHeaders)
+                {
+                    csv.WriteHeader<TransactionItem>();
+                }
 
-                stream.Write(headerBuffer, 0, headerBuffer.Length);
-
-                foreach (var item in allItems)
+                foreach (var item in items)
                 {
                     var positionBefore = stream.Position;
 
-                    item.ToCsv(stream);
+                    csv.WriteRecord(item);
+                    csv.NextRecord();
+                    csv.Flush();
+                    writer.Flush();
 
                     var positionAfter = stream.Position;
 
@@ -152,18 +162,60 @@ namespace MirrorLakeKusto.Storage
                     {
                         stream.SetLength(positionBefore);
                         stream.Flush();
-                        await tempCheckpointGateway.WriteAsync(stream.GetBuffer(), ct);
+                        await checkpointGateway.WriteAsync(stream.ToArray(), ct);
                         stream.SetLength(0);
-                        item.ToCsv(stream);
+                        csv.WriteRecord(item);
+                        csv.NextRecord();
                     }
                 }
                 if (stream.Position > 0)
                 {
+                    csv.Flush();
+                    writer.Flush();
                     stream.Flush();
-                    await tempCheckpointGateway.WriteAsync(stream.GetBuffer(), ct);
+                    await checkpointGateway.WriteAsync(stream.ToArray(), ct);
                 }
             }
+        }
 
+        private static IImmutableList<TransactionItem> ParseCsv(byte[] buffer)
+        {
+            const bool VALIDATE_HEADER = true;
+
+            if (!buffer.Any())
+            {
+                return ImmutableArray<TransactionItem>.Empty;
+            }
+            else
+            {
+                using (var stream = new MemoryStream(buffer))
+                using (var reader = new StreamReader(stream))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                {
+                    TransactionItem.RegisterClassMap(csv.Context);
+                    if (VALIDATE_HEADER)
+                    {
+                        csv.Read();
+                        csv.ReadHeader();
+                        csv.ValidateHeader<TransactionItem>();
+                    }
+                    var items = csv.GetRecords<TransactionItem>();
+
+                    return items.ToImmutableArray();
+                }
+            }
+        }
+
+        private async Task CompactAsync(CancellationToken ct)
+        {
+            var tempCheckpointGateway =
+                await _checkpointGateway.GetTemporaryCheckpointGatewayAsync(ct);
+            var allItems = _tableStatusIndex.Values
+                .Select(s => s.AllStatus)
+                .Prepend(_orphanItems)
+                .SelectMany(s => s);
+
+            await PersistItemsAsync(tempCheckpointGateway, allItems, true, ct);
             _checkpointGateway = tempCheckpointGateway;
         }
     }
