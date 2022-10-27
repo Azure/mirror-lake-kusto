@@ -26,6 +26,7 @@ namespace MirrorLakeKusto.Orchestrations
             TableStatus tableStatus,
             DeltaTableGateway deltaTableGateway,
             DatabaseGateway databaseGateway,
+            string? creationTime,
             bool continuousRun,
             bool isFreeCluster)
         {

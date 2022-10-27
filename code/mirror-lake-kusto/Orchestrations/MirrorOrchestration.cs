@@ -7,6 +7,7 @@ using MirrorLakeKusto.Storage;
 using MirrorLakeKusto.Storage.DeltaLake;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 
 namespace MirrorLakeKusto.Orchestrations
 {
@@ -69,6 +70,7 @@ namespace MirrorLakeKusto.Orchestrations
                             storageCredentials,
                             tableParameterizationMap[t].DeltaTableStorageUrl),
                         db.Gateway,
+                        tableParameterizationMap[t].CreationTime,
                         parameters.ContinuousRun,
                         isFreeCluster));
 
