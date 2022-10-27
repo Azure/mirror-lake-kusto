@@ -143,6 +143,12 @@ namespace MirrorLakeKusto.Orchestrations
                 }
                 await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
             }
+            await BlobAnalysisOrchestration.EnsureAllAnalyzedAsync(
+                _databaseGateway,
+                stagingTable,
+                _tableStatus,
+                logs.StartTxId,
+                ct);
             await BlobStagingOrchestration.EnsureAllStagedAsync(
                 _databaseGateway,
                 stagingTable,
