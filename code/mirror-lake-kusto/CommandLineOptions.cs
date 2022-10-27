@@ -13,6 +13,12 @@ namespace MirrorLakeKusto
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after first batch")]
         public bool ContinuousRun { get; set; } = false;
 
+        [Option(
+            "creation-time",
+            Required = false,
+            HelpText = "Kusto expression to resolve into extent creation time")]
+        public string? CreationTime { get; set; }
+
         [Option('c', "checkpoint", Required = false, HelpText = "Checkpoint CSV blob folder URL")]
         public string CheckpointBlobFolderUrl { get; set; } = string.Empty;
 
@@ -31,12 +37,5 @@ namespace MirrorLakeKusto
 
         [Option('t', "table", Required = false, HelpText = "Kusto Table")]
         public string KustoTable { get; set; } = string.Empty;
-
-        [Option(
-            'p',
-            "partition",
-            Required = false,
-            HelpText = "Ingest Partition Columns (true / false)")]
-        public bool IngestPartitionColumns { get; set; } = true;
     }
 }

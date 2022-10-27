@@ -11,8 +11,6 @@ namespace MirrorLakeKusto
         public string? OsVersion { get; set; }
 
         public string? AuthenticationMode { get; set; }
-
-        public List<RequestDescriptionTable>? Tables { get; set; }
     }
 
     [JsonSerializable(typeof(RequestDescription))]
