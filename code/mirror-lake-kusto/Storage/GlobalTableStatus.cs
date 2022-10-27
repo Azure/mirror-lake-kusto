@@ -145,6 +145,7 @@ namespace MirrorLakeKusto.Storage
                 if (persistHeaders)
                 {
                     csv.WriteHeader<TransactionItem>();
+                    csv.NextRecord();
                 }
 
                 foreach (var item in items)
@@ -168,10 +169,10 @@ namespace MirrorLakeKusto.Storage
                         csv.NextRecord();
                     }
                 }
+                csv.Flush();
+                writer.Flush();
                 if (stream.Position > 0)
                 {
-                    csv.Flush();
-                    writer.Flush();
                     stream.Flush();
                     await checkpointGateway.WriteAsync(stream.ToArray(), ct);
                 }
