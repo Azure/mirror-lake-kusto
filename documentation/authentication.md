@@ -12,7 +12,7 @@ There are three resources requiring authentication in Mirror Lake Kusto:
 
 On top of that, there are two applications accessing those resources:  Mirror Lake Kusto itself and Azure Data Explorer.
 
-This is because Mirror Lake Kusto runs as a stand alone CLI.  Certain part of the mirroring processed are done by the CLI while others (e.g. ingestion) is delegated to Azure Data Explorer.
+This is because Mirror Lake Kusto runs as a stand alone CLI.  Certain part of the mirroring processed are done by the CLI (e.g. reading Delta Lake transaction log) while others (e.g. ingestion) is delegated to Azure Data Explorer.
 
 ##  Authentication Mechanisms
 
@@ -20,19 +20,14 @@ Mirror Lake Kusto (MLK) supports a few authentication mechanisms.  The user can 
 
 Depending on the choosen mechanism, MLK will infer an authentication mechanism for the Delta Lake blobs and the checkpoint blob as follow:
 
-Cluster|Can create SAS Token?|MLK to Checkpoint|ADX to Checkpoint|MLK to Delta Lake|ADX to Delta Lake
--|-|-|-|-|-
-Azure CLI (default)|Yes|SAS token|SAS token|SAS token|SAS token
-Azure CLI (default)|No|Azure CLI|Impersonation|Azure CLI|Cluster system identity
-Service Principal|Yes|SAS token|SAS token|SAS token|SAS token
-Service Principal|No|Service Principal|Impersonation|Service Principal|Cluster system identity
-Managed Service Identity|N/A|Unsupported|Unsupported|Unsupported|Unsupported
-
-As we can see, MLK will try to create SAS tokens for the other resources if the identity used for the Cluster can.  Otherwise it falls back to using AAD Authentication.  This is to simplify scenarios since in order to use AAD everywhere, we need to configure the cluster and 2 storage accounts.
+Cluster|MLK to Checkpoint|ADX to Checkpoint|MLK to Delta Lake|ADX to Delta Lake
+-|-|-|-|-
+User Auth (default)|Azure Default|Impersonate|Azure Default|Impersonate
+Service Principal|Service Principal|Impersonate|Service Principal|Service Principal
 
 ## Connection string example
 
-The simplest example is with the Azure CLI authentication mechanism, where the connection string can simply be the ingestion URL itself:
+The simplest example is with the user authentication mechanism, where the connection string can simply be the ingestion URL itself:
 
 ```
 https://ingest-mycluster.region.kusto.windows.net
