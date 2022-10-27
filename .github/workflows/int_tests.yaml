@@ -19,7 +19,7 @@ jobs:
     env:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
       dotnetOs:  linux-x64
-      exec:  mirror-lake-kusto
+      exec:  mlk
       dbPrefix:  github_linux
 
     steps:
