@@ -29,8 +29,9 @@ namespace MirrorLakeKusto.Orchestrations
             var storageCredentials =
                 CreateNonSasStorageCredentials(parameters.ClusterIngestionConnectionString);
             var globalTableStatusTask = GlobalTableStatus.RetrieveAsync(
-                parameters.CheckpointBlobUrl,
+                parameters.CheckpointBlobFolderUrl,
                 storageCredentials,
+                parameters.DeltaTableParameterizations.Select(d => d.KustoTable),
                 ct);
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.ClusterIngestionConnectionString,
@@ -53,7 +54,7 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 Trace.TraceInformation($"Initialize Database '{db.Gateway.DatabaseName}' schemas...");
                 await db.Gateway.CreateMergeDatabaseObjectsAsync(
-                    parameters.CheckpointBlobUrl,
+                    globalTableStatus.CheckpointUri,
                     ct);
                 Trace.TraceInformation($"Read Database '{db.Gateway.DatabaseName}' status...");
 
@@ -62,7 +63,8 @@ namespace MirrorLakeKusto.Orchestrations
                     t => t.KustoTable);
                 var tableOrchestrations = tableNames
                     .Select(t => new DeltaTableOrchestration(
-                        globalTableStatus.GetSingleTableStatus(db.Gateway.DatabaseName, t),
+                        db.Gateway.DatabaseName,
+                        globalTableStatus[t],
                         new DeltaTableGateway(
                             storageCredentials,
                             tableParameterizationMap[t].DeltaTableStorageUrl),

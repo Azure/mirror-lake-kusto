@@ -1,10 +1,13 @@
 ﻿using Azure.Core;
-using MirrorLakeKusto.Storage.Bookmark;
+using CsvHelper;
+using Microsoft.Identity.Client.Platforms.Features.DesktopOs.Kerberos;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,127 +16,96 @@ namespace MirrorLakeKusto.Storage
 {
     internal class GlobalTableStatus
     {
-        #region Inner Types
-        private record TableKey(string Database, string Table);
+        private const string CHECKPOINT_BLOB = "index.csv";
 
-        private record TransactionItemKey(
-            long StartTxId,
-            long EndTxId,
-            TransactionItemAction Action,
-            Uri? BlobPath);
-
-        private class TableItemIndex
-        {
-            public TableItemIndex(int initialBlockId, IEnumerable<TransactionItem> initialItems)
-            {
-                var pairs = initialItems
-                    .Select(i => KeyValuePair.Create(
-                        new TransactionItemKey(i.StartTxId, i.EndTxId, i.Action, i.BlobPath),
-                        i));
-
-                BlockIds = new List<int>(new[] { initialBlockId });
-                ItemIndex = new Dictionary<TransactionItemKey, TransactionItem>(pairs);
-            }
-
-            /// <summary>All block IDs used to persist blocks for that table.</summary>
-            public IList<int> BlockIds { get; }
-
-            /// <summary>In memory we only keep the latest for each item.</summary>
-            public IDictionary<TransactionItemKey, TransactionItem> ItemIndex { get; }
-        }
-        #endregion
-
-        private readonly BookmarkGateway _bookmarkGateway;
-        //  It is assumed that tables can be accessed by different threads
-        //  But that each table by itself is accessed a single-thread at the time
-        private readonly ConcurrentDictionary<TableKey, TableItemIndex> _tableIndex;
+        //  Items not belonging to any of the "planned" tables
+        //  Typically those would be from a past run and we'll keep them around
+        private readonly IImmutableList<TransactionItem> _orphanItems;
+        private readonly IImmutableDictionary<string, TableStatus> _tableStatusIndex;
+        private CheckpointGateway _checkpointGateway;
 
         #region Constructors
         public static async Task<GlobalTableStatus> RetrieveAsync(
-            Uri checkpointBlobUrl,
+            Uri checkpointBlobFolderUrl,
             TokenCredential credential,
+            IEnumerable<string> tableNames,
             CancellationToken ct)
         {
-            var bookmarkGateway = await BookmarkGateway.CreateAsync(
-                checkpointBlobUrl,
-                credential,
-                false,
-                ct);
-            var blocks = await bookmarkGateway.ReadAllBlocksAsync(ct);
+            var checkpointBlobUrl = new Uri(
+                Path.Combine(checkpointBlobFolderUrl.ToString(), CHECKPOINT_BLOB));
+            var checkpointGateway = new CheckpointGateway(checkpointBlobUrl, credential);
 
-            if (blocks.Count() > 0)
-            {   //  Rewrite the content in blocks in case somebody edited the file
-                Trace.TraceInformation("Rewrite checkpoint blob...");
-
-                var content = await bookmarkGateway.ReadAllContentAsync(ct);
-                var items = TransactionItem.FromCsv(content, true);
-                var logList = items
-                    .GroupBy(i => new TableKey(i.KustoDatabaseName, i.KustoTableName))
-                    .Select(g => new
-                    {
-                        Content = TransactionItem.ToCsv(g),
-                        //  De-duplicate items
-                        Items = g
-                    })
-                    .ToImmutableList();
-                var bookmarkTx = new BookmarkTransaction(
-                    logList.Select(l => l.Content).Prepend(TransactionItem.GetCsvHeader()),
-                    null,
-                    blocks.Select(b => b.Id));
-                var result = await bookmarkGateway.ApplyTransactionAsync(bookmarkTx, ct);
+            if (!(await checkpointGateway.ExistsAsync(ct)))
+            {
+                await checkpointGateway.CreateAsync(ct);
+                await PersistItemsAsync(checkpointGateway, new TransactionItem[0], true, ct);
 
                 return new GlobalTableStatus(
-                    bookmarkGateway,
-                    result.AddedBlockIds.Skip(1),
-                    logList.Select(l => l.Items));
+                    checkpointGateway,
+                    tableNames,
+                    new TransactionItem[0]);
             }
             else
-            {   //  Persist the CSV header only
-                var header = TransactionItem.GetCsvHeader();
-                var tx = new BookmarkTransaction(new[] { header }, null, null);
-                var result = await bookmarkGateway.ApplyTransactionAsync(tx, ct);
+            {
+                var buffer = await checkpointGateway.ReadAllContentAsync(ct);
 
-                //  We do not need keep the CSV header block as we won't change it or delete it
-                return new GlobalTableStatus(
-                    bookmarkGateway,
-                    new int[0],
-                    new IEnumerable<TransactionItem>[0]);
+                //  Rewrite the content in one clean append-blob
+                //  Ensure it's an append blob + compact it
+                Trace.TraceInformation("Rewrite checkpoint blob...");
+
+                IImmutableList<TransactionItem> items = ParseCsv(buffer);
+                var globalTableStatus =
+                    new GlobalTableStatus(checkpointGateway, tableNames, items);
+
+                await globalTableStatus.CompactAsync(ct);
+
+                return globalTableStatus;
             }
         }
 
         private GlobalTableStatus(
-            BookmarkGateway bookmarkGateway,
-            IEnumerable<int> blockIds,
-            IEnumerable<IEnumerable<TransactionItem>> itemBlocks)
+            CheckpointGateway checkpointGateway,
+            IEnumerable<string> tableNames,
+            IEnumerable<TransactionItem> items)
         {
-            _bookmarkGateway = bookmarkGateway;
+            var dedupItems = items
+                .GroupBy(i => i.GetItemKey())
+                .Select(g => g.Last());
+            var itemByTableName = dedupItems
+                .GroupBy(i => i.KustoTableName)
+                .ToImmutableDictionary(g => g.Key);
+            var noItems = ImmutableArray<TransactionItem>.Empty;
 
-            //  Zip the ids with the data and index it
-            var tableItemsList =
-                blockIds.Zip(itemBlocks, (id, items) => KeyValuePair.Create(
-                    new TableKey(
-                        items.First().KustoDatabaseName,
-                        items.First().KustoTableName),
-                    new TableItemIndex(id, KeepLatestForEachKeyOnly(items))));
+            _orphanItems = itemByTableName
+                .Where(p => !tableNames.Contains(p.Key))
+                .SelectMany(p => p.Value)
+                .ToImmutableArray();
+            _tableStatusIndex = tableNames
+                .Select(t => new TableStatus(
+                    this,
+                    t,
+                    itemByTableName.ContainsKey(t) ? itemByTableName[t] : noItems))
+                .ToImmutableDictionary(s => s.TableName, s => s);
 
-            //  Then index each of those per table / db
-            _tableIndex = new ConcurrentDictionary<TableKey, TableItemIndex>(tableItemsList);
+            _checkpointGateway = checkpointGateway;
         }
         #endregion
 
-        public TableStatus GetSingleTableStatus(string database, string table)
-        {
-            var tableKey = new TableKey(database, table);
-            TableItemIndex? tableItemIndex;
+        public Uri CheckpointUri => _checkpointGateway.BlobUri;
 
-            //  We know only one thread at the time would do this
-            if (_tableIndex.TryGetValue(tableKey, out tableItemIndex))
+        public TableStatus this[string table]
+        {
+            get
             {
-                return new TableStatus(this, database, table, tableItemIndex.ItemIndex.Values);
-            }
-            else
-            {
-                return new TableStatus(this, database, table, new TransactionItem[0]);
+                if (_tableStatusIndex.TryGetValue(table, out var tableStatus))
+                {
+                    return tableStatus;
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Table '{table}' not found in global status");
+                }
             }
         }
 
@@ -141,79 +113,111 @@ namespace MirrorLakeKusto.Storage
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
         {
-            var itemsContent = TransactionItem.ToCsv(items);
-
-            if (itemsContent.Length == 0)
+            if (items.Count() == 0)
             {
                 throw new ArgumentException("Is empty", nameof(items));
             }
 
-            var tx = new BookmarkTransaction(new[] { itemsContent }, null, null);
-            var result = await _bookmarkGateway.ApplyTransactionAsync(tx, ct);
-            var newBlockId = result.AddedBlockIds.First();
-            var tableKey = new TableKey(
-                items.First().KustoDatabaseName,
-                items.First().KustoTableName);
-            TableItemIndex? tableItemIndex;
-
-            //  We know only one thread at the time would do this
-            if (!_tableIndex.TryGetValue(tableKey, out tableItemIndex))
+            if (_checkpointGateway.CanWrite)
             {
-                tableItemIndex = new TableItemIndex(newBlockId, items);
-                _tableIndex[tableKey] = tableItemIndex;
+                await PersistItemsAsync(_checkpointGateway, items, false, ct);
             }
-            tableItemIndex.BlockIds.Add(newBlockId);
-            foreach (var i in items)
-            {   //  Keep latest added in memory
-                var transactionItemKey = new TransactionItemKey(
-                    i.StartTxId,
-                    i.EndTxId,
-                    i.Action,
-                    i.BlobPath);
-
-                tableItemIndex.ItemIndex[transactionItemKey] = i;
+            else
+            {
+                await CompactAsync(ct);
+                await PersistNewItemsAsync(items, ct);
             }
         }
 
-        private ReadOnlyMemory<byte> ToBuffer(string headerText)
+        private async static Task PersistItemsAsync(
+            CheckpointGateway checkpointGateway,
+            IEnumerable<TransactionItem> items,
+            bool persistHeaders,
+            CancellationToken ct)
         {
-            return new ReadOnlyMemory<byte>(ASCIIEncoding.UTF8.GetBytes(headerText));
-        }
+            const long MAX_LENGTH = 4000000;
 
-        private static IEnumerable<TransactionItem> KeepLatestForEachKeyOnly(
-            IEnumerable<TransactionItem> items)
-        {
-            var latest = items
-                .GroupBy(i => new TransactionItemKey(
-                    i.StartTxId,
-                    i.EndTxId,
-                    i.Action,
-                    i.BlobPath))
-                .Select(g => KeepLatestOnly(g));
-
-            return latest;
-        }
-
-        private static TransactionItem KeepLatestOnly(IEnumerable<TransactionItem> items)
-        {
-            TransactionItem? latest = null;
-            DateTime? latestMirrorTimestamp = null;
-
-            foreach (var item in items)
+            using (var stream = new MemoryStream())
+            using (var writer = new StreamWriter(stream))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                if (latestMirrorTimestamp == null
-                    || item.MirrorTimestamp > latestMirrorTimestamp)
+                TransactionItem.RegisterClassMap(csv.Context);
+                if (persistHeaders)
                 {
-                    latestMirrorTimestamp = item.MirrorTimestamp;
-                    latest = item;
+                    csv.WriteHeader<TransactionItem>();
+                    csv.NextRecord();
+                }
+
+                foreach (var item in items)
+                {
+                    var positionBefore = stream.Position;
+
+                    csv.WriteRecord(item);
+                    csv.NextRecord();
+                    csv.Flush();
+                    writer.Flush();
+
+                    var positionAfter = stream.Position;
+
+                    if (positionAfter > MAX_LENGTH)
+                    {
+                        stream.SetLength(positionBefore);
+                        stream.Flush();
+                        await checkpointGateway.WriteAsync(stream.ToArray(), ct);
+                        stream.SetLength(0);
+                        csv.WriteRecord(item);
+                        csv.NextRecord();
+                    }
+                }
+                csv.Flush();
+                writer.Flush();
+                if (stream.Position > 0)
+                {
+                    stream.Flush();
+                    await checkpointGateway.WriteAsync(stream.ToArray(), ct);
                 }
             }
-            if (latest == null)
-            {
-                throw new ArgumentNullException(nameof(items));
-            }
+        }
 
-            return latest;
+        private static IImmutableList<TransactionItem> ParseCsv(byte[] buffer)
+        {
+            const bool VALIDATE_HEADER = true;
+
+            if (!buffer.Any())
+            {
+                return ImmutableArray<TransactionItem>.Empty;
+            }
+            else
+            {
+                using (var stream = new MemoryStream(buffer))
+                using (var reader = new StreamReader(stream))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                {
+                    TransactionItem.RegisterClassMap(csv.Context);
+                    if (VALIDATE_HEADER)
+                    {
+                        csv.Read();
+                        csv.ReadHeader();
+                        csv.ValidateHeader<TransactionItem>();
+                    }
+                    var items = csv.GetRecords<TransactionItem>();
+
+                    return items.ToImmutableArray();
+                }
+            }
+        }
+
+        private async Task CompactAsync(CancellationToken ct)
+        {
+            var tempCheckpointGateway =
+                await _checkpointGateway.GetTemporaryCheckpointGatewayAsync(ct);
+            var allItems = _tableStatusIndex.Values
+                .Select(s => s.AllStatus)
+                .Prepend(_orphanItems)
+                .SelectMany(s => s);
+
+            await PersistItemsAsync(tempCheckpointGateway, allItems, true, ct);
+            _checkpointGateway = tempCheckpointGateway;
         }
     }
 }

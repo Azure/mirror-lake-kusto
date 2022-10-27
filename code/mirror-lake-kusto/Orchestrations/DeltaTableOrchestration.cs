@@ -22,6 +22,7 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly bool _isFreeCluster;
 
         public DeltaTableOrchestration(
+            string databaseName,
             TableStatus tableStatus,
             DeltaTableGateway deltaTableGateway,
             DatabaseGateway databaseGateway,
@@ -33,9 +34,10 @@ namespace MirrorLakeKusto.Orchestrations
             _databaseGateway = databaseGateway;
             _continuousRun = continuousRun;
             _isFreeCluster = isFreeCluster;
+            KustoDatabaseName = databaseName;
         }
 
-        public string KustoDatabaseName => _tableStatus.DatabaseName;
+        public string KustoDatabaseName { get; }
 
         public string KustoTableName => _tableStatus.TableName;
 
@@ -48,7 +50,6 @@ namespace MirrorLakeKusto.Orchestrations
                     var currentLog = _tableStatus.GetAllDoneLogs();
                     var newLogs = await _deltaTableGateway.GetNextTransactionLogAsync(
                         currentLog,
-                        KustoDatabaseName,
                         KustoTableName,
                         ct);
 
@@ -295,7 +296,7 @@ namespace MirrorLakeKusto.Orchestrations
 
                 Trace.TraceInformation(
                     "Updating schema of Kusto table "
-                    + $"'{_tableStatus.DatabaseName}.{_tableStatus.TableName}'");
+                    + $"'{KustoDatabaseName}.{_tableStatus.TableName}'");
 
                 await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
                 await _tableStatus.PersistNewItemsAsync(
@@ -310,7 +311,6 @@ namespace MirrorLakeKusto.Orchestrations
             var startTxId = templateItem.StartTxId;
             var stagingTableName = CreateStagingTableName(startTxId);
             var stagingTableItem = TransactionItem.CreateStagingTableItem(
-                templateItem.KustoDatabaseName,
                 templateItem.KustoTableName,
                 templateItem.StartTxId,
                 templateItem.EndTxId,

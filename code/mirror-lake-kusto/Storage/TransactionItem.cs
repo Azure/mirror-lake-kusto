@@ -21,14 +21,20 @@ namespace MirrorLakeKusto.Storage
                     WriteIndented = false
                 });
 
-        public static string ExternalTableSchema => "KustoDatabaseName:string, KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, PartitionColumns:dynamic, Schema:dynamic, InternalState:dynamic";
+        public static string ExternalTableSchema => "KustoTableName:string, StartTxId:long, EndTxId:long, Action:string, State:string, MirrorTimestamp:datetime, DeltaTimestamp:datetime, BlobPath:string, PartitionValues:dynamic, Size:long, RecordCount:long, PartitionColumns:dynamic, Schema:dynamic, InternalState:dynamic";
 
         #region Inner types
+        internal record ItemKey(
+            string tableName,
+            long startTxId,
+            long endTxId,
+            TransactionItemAction action,
+            Uri? blobPath);
+
         private class TransactionItemMap : ClassMap<TransactionItem>
         {
             public TransactionItemMap()
             {
-                Map(m => m.KustoDatabaseName);
                 Map(m => m.KustoTableName);
                 Map(m => m.StartTxId);
                 Map(m => m.EndTxId);
@@ -200,7 +206,6 @@ namespace MirrorLakeKusto.Storage
         /// <summary>This should only be called by serializer.</summary>
         public TransactionItem()
         {
-            KustoDatabaseName = "MISSING DB";
             KustoTableName = "MISSING TABLE";
             StartTxId = -1;
             EndTxId = -1;
@@ -210,7 +215,6 @@ namespace MirrorLakeKusto.Storage
         }
 
         private TransactionItem(
-            string kustoDatabaseName,
             string kustoTableName,
             long startTxId,
             long endTxId,
@@ -225,7 +229,6 @@ namespace MirrorLakeKusto.Storage
             IImmutableList<ColumnDefinition>? schema,
             InternalState internalState)
         {
-            KustoDatabaseName = kustoDatabaseName;
             KustoTableName = kustoTableName;
             StartTxId = startTxId;
             EndTxId = endTxId;
@@ -243,7 +246,6 @@ namespace MirrorLakeKusto.Storage
         }
 
         public static TransactionItem CreateStagingTableItem(
-            string kustoDatabaseName,
             string kustoTableName,
             long startTxId,
             long endTxId,
@@ -251,7 +253,6 @@ namespace MirrorLakeKusto.Storage
             StagingTableInternalState stagingTableInternalState)
         {
             return new TransactionItem(
-                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -268,7 +269,6 @@ namespace MirrorLakeKusto.Storage
         }
 
         public static TransactionItem CreateAddItem(
-            string kustoDatabaseName,
             string kustoTableName,
             long startTxId,
             long endTxId,
@@ -280,7 +280,6 @@ namespace MirrorLakeKusto.Storage
             long recordCount)
         {
             return new TransactionItem(
-                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -297,7 +296,6 @@ namespace MirrorLakeKusto.Storage
         }
 
         public static TransactionItem CreateRemoveItem(
-            string kustoDatabaseName,
             string kustoTableName,
             long startTxId,
             long endTxId,
@@ -309,7 +307,6 @@ namespace MirrorLakeKusto.Storage
             long size)
         {
             return new TransactionItem(
-                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -326,7 +323,6 @@ namespace MirrorLakeKusto.Storage
         }
 
         public static TransactionItem CreateSchemaItem(
-            string kustoDatabaseName,
             string kustoTableName,
             long startTxId,
             long endTxId,
@@ -337,7 +333,6 @@ namespace MirrorLakeKusto.Storage
             SchemaInternalState schemaInternalState)
         {
             return new TransactionItem(
-                kustoDatabaseName,
                 kustoTableName,
                 startTxId,
                 endTxId,
@@ -355,10 +350,6 @@ namespace MirrorLakeKusto.Storage
         #endregion
 
         #region Common properties
-        /// <summary>Name of the database in Kusto.</summary>
-        [Index(100)]
-        public string KustoDatabaseName { get; set; }
-
         /// <summary>Name of the table in Kusto.</summary>
         [Index(200)]
         public string KustoTableName { get; set; }
@@ -441,6 +432,11 @@ namespace MirrorLakeKusto.Storage
         public InternalState InternalState { get; set; } = new InternalState();
         #endregion
 
+        public static void RegisterClassMap(CsvContext csvContext)
+        {
+            csvContext.RegisterClassMap<TransactionItemMap>();
+        }
+
         public TransactionItem UpdateState(TransactionItemState applied)
         {
             var clone = Clone(clone =>
@@ -464,66 +460,9 @@ namespace MirrorLakeKusto.Storage
             return clone;
         }
 
-        public static ReadOnlyMemory<byte> GetCsvHeader()
+        public ItemKey GetItemKey()
         {
-            using (var stream = new MemoryStream())
-            using (var writer = new StreamWriter(stream))
-            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
-            {
-                csv.Context.RegisterClassMap<TransactionItemMap>();
-                csv.WriteHeader<TransactionItem>();
-                csv.NextRecord();
-                csv.Flush();
-                writer.Flush();
-                stream.Flush();
-
-                var buffer = stream.ToArray();
-
-                return new ReadOnlyMemory<byte>(buffer);
-            }
-        }
-
-        public static ReadOnlyMemory<byte> ToCsv(IEnumerable<TransactionItem> items)
-        {
-            using (var stream = new MemoryStream())
-            using (var writer = new StreamWriter(stream))
-            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
-            {
-                csv.Context.RegisterClassMap<TransactionItemMap>();
-                foreach (var item in items)
-                {
-                    csv.WriteRecord(item);
-                    csv.NextRecord();
-                }
-                csv.Flush();
-                writer.Flush();
-                stream.Flush();
-
-                var buffer = stream.ToArray();
-
-                return new ReadOnlyMemory<byte>(buffer);
-            }
-        }
-
-        public static IImmutableList<TransactionItem> FromCsv(
-            ReadOnlyMemory<byte> buffer,
-            bool validateHeader)
-        {
-            using (var stream = new MemoryStream(buffer.ToArray()))
-            using (var reader = new StreamReader(stream))
-            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
-            {
-                csv.Context.RegisterClassMap<TransactionItemMap>();
-                if (validateHeader)
-                {
-                    csv.Read();
-                    csv.ReadHeader();
-                    csv.ValidateHeader<TransactionItem>();
-                }
-                var items = csv.GetRecords<TransactionItem>();
-
-                return items.ToImmutableArray();
-            }
+            return new ItemKey(KustoTableName, StartTxId, EndTxId, Action, BlobPath);
         }
     }
 

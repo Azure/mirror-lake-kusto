@@ -70,7 +70,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
 
         internal async Task<TransactionLog?> GetNextTransactionLogAsync(
             TransactionLog? currentLog,
-            string kustoDatabaseName,
             string kustoTableName,
             CancellationToken ct)
         {
@@ -88,12 +87,10 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                     var afterLogTask = GetTransactionLogFromAsync(
                         checkpointTxId + 1,
                         checkpointTxId + 10,
-                        kustoDatabaseName,
                         kustoTableName,
                         ct);
                     var cummulativeTxLog = await ExtractCheckpointTxLogAsync(
                         checkpointTxId,
-                        kustoDatabaseName,
                         kustoTableName);
                     var deltaLog = currentLog == null
                         ? cummulativeTxLog
@@ -110,7 +107,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                     return await GetTransactionLogFromAsync(
                         currentLog == null ? 0 : currentLog.EndTxId + 1,
                         checkpointTxId + 10,
-                        kustoDatabaseName,
                         kustoTableName,
                         ct);
                 }
@@ -120,7 +116,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 return await GetTransactionLogFromAsync(
                     currentLog == null ? null : currentLog.EndTxId + 1,
                     currentLog == null ? null : 9,
-                    kustoDatabaseName,
                     kustoTableName,
                     ct);
             }
@@ -129,7 +124,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
         private async Task<TransactionLog?> GetTransactionLogFromAsync(
             long? fromTxId,
             long? toTxId,
-            string kustoDatabaseName,
             string kustoTableName,
             CancellationToken ct)
         {
@@ -144,7 +138,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                 .Select(txId => LoadTransactionBlobAsync(
                     txId,
                     GetTransactionBlobPath(txId),
-                    kustoDatabaseName,
                     kustoTableName,
                     ct))
                 .ToImmutableArray();
@@ -230,7 +223,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
         private async Task<TransactionLog> LoadTransactionBlobAsync(
             long txId,
             string blobName,
-            string kustoDatabaseName,
             string kustoTableName,
             CancellationToken ct)
         {
@@ -242,7 +234,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
 
                 return TransactionLogEntry.LoadDeltaLogFromJson(
                     txId,
-                    kustoDatabaseName,
                     kustoTableName,
                     DeltaTableStorageUrl,
                     blobText);
@@ -293,7 +284,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
 
         private async Task<TransactionLog> ExtractCheckpointTxLogAsync(
             long checkpointTxId,
-            string kustoDatabaseName,
             string kustoTableName)
         {
             var paddedVersion = checkpointTxId.ToString("D20");
@@ -302,7 +292,6 @@ namespace MirrorLakeKusto.Storage.DeltaLake
             var parquetResult = await parquetBlob.DownloadContentAsync();
             var log = TransactionLogEntry.LoadDeltaLogFromParquet(
                 checkpointTxId,
-                kustoDatabaseName,
                 kustoTableName,
                 DeltaTableStorageUrl,
                 parquetResult.Value.Content.ToStream());

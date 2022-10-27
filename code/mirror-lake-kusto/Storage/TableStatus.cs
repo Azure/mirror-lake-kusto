@@ -1,5 +1,6 @@
 ﻿using Kusto.Cloud.Platform.Utils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Data;
@@ -13,29 +14,32 @@ namespace MirrorLakeKusto.Storage
     internal class TableStatus
     {
         private readonly GlobalTableStatus _globalTableStatus;
-        private IImmutableList<TransactionItem> _statuses;
+        private readonly ConcurrentDictionary<TransactionItem.ItemKey, TransactionItem>
+            _statuses;
 
         public TableStatus(
             GlobalTableStatus globalTableStatus,
-            string databaseName,
             string tableName,
             IEnumerable<TransactionItem> blobStatuses)
         {
+            var statusPair = blobStatuses
+                .Select(i => KeyValuePair.Create(i.GetItemKey(), i));
+
             _globalTableStatus = globalTableStatus;
-            DatabaseName = databaseName;
             TableName = tableName;
-            _statuses = blobStatuses.ToImmutableArray();
+            _statuses = new ConcurrentDictionary<TransactionItem.ItemKey, TransactionItem>(
+                statusPair);
         }
 
-        public string DatabaseName { get; }
-
         public string TableName { get; }
+
+        public IEnumerable<TransactionItem> AllStatus => _statuses.Values;
 
         public bool IsBatchIncomplete
         {
             get
             {
-                var isBatchIncomplete = _statuses
+                var isBatchIncomplete = _statuses.Values
                     .Where(s => !IsComplete(s.State))
                     .Any();
 
@@ -45,7 +49,7 @@ namespace MirrorLakeKusto.Storage
 
         public long GetEarliestIncompleteBatchTxId()
         {
-            var startTxId = _statuses
+            var startTxId = _statuses.Values
                 .Where(s => !IsComplete(s.State))
                 .Select(s => s.StartTxId)
                 .First();
@@ -57,7 +61,7 @@ namespace MirrorLakeKusto.Storage
         {
             if (_statuses.Any())
             {
-                var logs = _statuses
+                var logs = _statuses.Values
                     .Where(s => s.Action != TransactionItemAction.StagingTable)
                     .GroupBy(s => s.StartTxId)
                     .Select(g => new TransactionLog(g));
@@ -73,7 +77,7 @@ namespace MirrorLakeKusto.Storage
 
         public TransactionLog GetBatch(long startTxId)
         {
-            var batchItems = _statuses
+            var batchItems = _statuses.Values
                 .Where(s => s.StartTxId == startTxId);
 
             return new TransactionLog(batchItems);
@@ -81,7 +85,7 @@ namespace MirrorLakeKusto.Storage
 
         public TransactionLog GetHistorical(long beforeTxId)
         {
-            var logs = _statuses
+            var logs = _statuses.Values
                 .Where(s => s.EndTxId < beforeTxId)
                 .GroupBy(s => s.StartTxId)
                 .Select(g => new TransactionLog(g));
@@ -92,7 +96,7 @@ namespace MirrorLakeKusto.Storage
 
         public TableDefinition GetTableDefinition(long upToTxId)
         {
-            var schemaItem = _statuses
+            var schemaItem = _statuses.Values
                 .Where(s => s.StartTxId <= upToTxId)
                 .Where(s => s.Action == TransactionItemAction.Schema)
                 .OrderByDescending(s => s.StartTxId)
@@ -113,13 +117,13 @@ namespace MirrorLakeKusto.Storage
         public async Task PersistNewItemsAsync(
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
-        {
+        {   //  Update before persisting
+            foreach(var i in items)
+            {
+                _statuses[i.GetItemKey()] = i;
+            }
+
             await _globalTableStatus.PersistNewItemsAsync(items, ct);
-
-            //  Refresh the status
-            var newStatus = _globalTableStatus.GetSingleTableStatus(DatabaseName, TableName);
-
-            _statuses = newStatus._statuses;
         }
 
         private static bool IsComplete(TransactionItemState state)

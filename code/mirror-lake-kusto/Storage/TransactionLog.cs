@@ -34,8 +34,6 @@ namespace MirrorLakeKusto.Storage
         {
         }
 
-        public string KustoDatabaseName => AllItems.First().KustoDatabaseName;
-
         public string KustoTableName => AllItems.First().KustoTableName;
 
         public long StartTxId => AllItems.First().StartTxId;

@@ -12,26 +12,32 @@ namespace MirrorLakeKusto.Parameters
         public MainParameterization(
             bool continuousRun,
             string clusterIngestionConnectionString,
-            Uri checkpointBlobUrl,
+            Uri checkpointBlobFolderUrl,
             IEnumerable<DeltaTableParameterization> deltaTableParameterizations)
         {
             ContinuousRun = continuousRun;
             ClusterIngestionConnectionString = clusterIngestionConnectionString;
-            CheckpointBlobUrl = checkpointBlobUrl;
+            CheckpointBlobFolderUrl = checkpointBlobFolderUrl;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
         }
 
         public static MainParameterization Create(CommandLineOptions options)
         {
-            Uri? checkpointBlobUrl;
+            Uri? checkpointBlobFolderUrl;
             Uri? deltaTableStorageUrl;
 
-            if (!Uri.TryCreate(options.CheckpointBlobUrl, UriKind.Absolute, out checkpointBlobUrl))
+            if (!Uri.TryCreate(
+                options.CheckpointBlobFolderUrl,
+                UriKind.Absolute,
+                out checkpointBlobFolderUrl))
             {
                 throw new MirrorException(
-                    $"Invalid Checkpoint Blob URL:  '{options.CheckpointBlobUrl}'");
+                    $"Invalid Checkpoint Blob folder URL:  '{options.CheckpointBlobFolderUrl}'");
             }
-            if (!Uri.TryCreate(options.DeltaTableStorageUrl, UriKind.Absolute, out deltaTableStorageUrl))
+            if (!Uri.TryCreate(
+                options.DeltaTableStorageUrl,
+                UriKind.Absolute,
+                out deltaTableStorageUrl))
             {
                 throw new MirrorException(
                     $"Invalid Delta Table URL:  '{options.DeltaTableStorageUrl}'");
@@ -46,7 +52,7 @@ namespace MirrorLakeKusto.Parameters
             return new MainParameterization(
                 options.ContinuousRun,
                 options.ClusterIngestionConnectionString,
-                checkpointBlobUrl,
+                checkpointBlobFolderUrl,
                 new[] { deltaTable });
         }
 
@@ -54,7 +60,7 @@ namespace MirrorLakeKusto.Parameters
         
         public string ClusterIngestionConnectionString { get; }
 
-        public Uri CheckpointBlobUrl { get; }
+        public Uri CheckpointBlobFolderUrl { get; }
 
         public IImmutableList<DeltaTableParameterization> DeltaTableParameterizations { get; }
     }
