@@ -9,6 +9,7 @@ namespace MirrorLakeKusto.Storage
     internal enum TransactionItemState
     {
         Initial,
+        Analyzed,
         Done,
         QueuedForIngestion,
         Staged

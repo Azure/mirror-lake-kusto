@@ -9,6 +9,9 @@ namespace MirrorLakeKusto.Storage
 {
     internal class AddInternalState
     {
+        /// <summary>Creation time override if a function was provided.</summary>
+        public DateTime? CreationTime { get; set; }
+
         /// <summary>Extent ID where the data of the blob has been ingested in staging.</summary>
         public Guid? StagingExtentId { get; set; }
 
