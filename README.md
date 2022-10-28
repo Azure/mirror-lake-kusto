@@ -10,7 +10,7 @@ Mirror Lake Kusto is a Command Line Interface (CLI) tool allowing you to keep an
 There are many options and authentication methods, but a straightforward example is:
 
 ```
-mirror-lake-kusto -s <Delta Table ADLS folder URL> -i <Kusto Cluster Ingestion URL> -d <Kusto DB> -t <Kusto Table> -c <Checkpoint blob URL>
+mirror-lake-kusto -s <Delta Table ADLS folder URL> -i <Kusto Cluster Ingestion URL> -d <Kusto DB> -t <Kusto Table> -c <Checkpoint ADLS folder URL>
 ```
 
 The CLI will keep the two tables in sync by ingesting and deleting data in Kusto.  **No duplication, no data loss.**
