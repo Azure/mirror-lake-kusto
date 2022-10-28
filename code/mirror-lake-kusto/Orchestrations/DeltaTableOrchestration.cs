@@ -269,7 +269,7 @@ namespace MirrorLakeKusto.Orchestrations
                 : @$".alter table {stagingTableSchema.Name} policy retention 
 ```
 {{
-  ""SoftDeletePeriod"": ""10000000:0:0:0""
+  ""SoftDeletePeriod"": ""40000.00:00:00""
 }}
 ```";
             //  Staging table:  shouldn't be queried by normal users

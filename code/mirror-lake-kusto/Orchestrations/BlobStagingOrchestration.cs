@@ -247,7 +247,7 @@ namespace MirrorLakeKusto.Orchestrations
             var creationTime = items.First().InternalState!.AddInternalState!.CreationTime;
             var creationTimeText = creationTime == null
                 ? string.Empty
-                : $", creationTime='{creationTime.Value.ToString("yyyy-mmm-ddTHH:mm:ss.ffff")}'";
+                : $", creationTime='{creationTime.Value.ToString("yyyy-MM-ddTHH:mm:ss")}'";
             var urlList = items.Select(i => i.BlobPath!);
             var urlListText = string.Join(
                 ", " + Environment.NewLine,
