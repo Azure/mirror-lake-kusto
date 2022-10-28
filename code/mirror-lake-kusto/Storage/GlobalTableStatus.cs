@@ -217,7 +217,8 @@ namespace MirrorLakeKusto.Storage
                 .SelectMany(s => s);
 
             await PersistItemsAsync(tempCheckpointGateway, allItems, true, ct);
-            _checkpointGateway = tempCheckpointGateway;
+            _checkpointGateway =
+                await tempCheckpointGateway.MoveAsync(_checkpointGateway.BlobUri, ct);
         }
     }
 }

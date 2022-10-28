@@ -270,11 +270,7 @@ namespace MirrorLakeKusto
                 {
                     SessionId = sessionId,
                     Os = Environment.OSVersion.Platform.ToString(),
-                    OsVersion = Environment.OSVersion.VersionString,
-                    Tables = parameters.DeltaTableParameterizations.Select(j => new RequestDescriptionTable
-                    {
-                        IngestPartitionColumns = j.IngestPartitionColumns
-                    }).ToList()
+                    OsVersion = Environment.OSVersion.VersionString
                 };
                 var buffer = JsonSerializer.SerializeToUtf8Bytes(
                     description,

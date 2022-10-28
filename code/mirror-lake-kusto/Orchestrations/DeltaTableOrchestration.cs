@@ -18,6 +18,7 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
         private readonly DatabaseGateway _databaseGateway;
+        private readonly string? _creationTime;
         private readonly bool _continuousRun;
         private readonly bool _isFreeCluster;
 
@@ -26,12 +27,14 @@ namespace MirrorLakeKusto.Orchestrations
             TableStatus tableStatus,
             DeltaTableGateway deltaTableGateway,
             DatabaseGateway databaseGateway,
+            string? creationTime,
             bool continuousRun,
             bool isFreeCluster)
         {
             _tableStatus = tableStatus;
             _deltaTableGateway = deltaTableGateway;
             _databaseGateway = databaseGateway;
+            _creationTime = creationTime;
             _continuousRun = continuousRun;
             _isFreeCluster = isFreeCluster;
             KustoDatabaseName = databaseName;
@@ -142,6 +145,13 @@ namespace MirrorLakeKusto.Orchestrations
                 }
                 await EnsureLandingTableSchemaAsync(stagingTable, logs.Metadata, ct);
             }
+            await BlobAnalysisOrchestration.EnsureAllAnalyzedAsync(
+                _databaseGateway,
+                stagingTable,
+                _tableStatus,
+                logs.StartTxId,
+                _creationTime,
+                ct);
             await BlobStagingOrchestration.EnsureAllStagedAsync(
                 _databaseGateway,
                 stagingTable,
@@ -259,7 +269,7 @@ namespace MirrorLakeKusto.Orchestrations
                 : @$".alter table {stagingTableSchema.Name} policy retention 
 ```
 {{
-  ""SoftDeletePeriod"": ""10000000:0:0:0""
+  ""SoftDeletePeriod"": ""40000.00:00:00""
 }}
 ```";
             //  Staging table:  shouldn't be queried by normal users

@@ -6,12 +6,12 @@
             Uri deltaTableStorageUrl,
             string database,
             string kustoTable,
-            bool ingestPartitionColumns)
+            string? creationTime)
         {
             DeltaTableStorageUrl = deltaTableStorageUrl;
             Database = database;
             KustoTable = kustoTable;
-            IngestPartitionColumns = ingestPartitionColumns;
+            CreationTime = creationTime;
         }
 
         public Uri DeltaTableStorageUrl { get; }
@@ -20,6 +20,6 @@
 
         public string KustoTable { get; }
 
-        public bool IngestPartitionColumns { get; }
+        public string? CreationTime { get; }
     }
 }

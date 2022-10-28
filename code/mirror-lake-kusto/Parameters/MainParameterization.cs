@@ -47,7 +47,7 @@ namespace MirrorLakeKusto.Parameters
                 deltaTableStorageUrl,
                 options.Database,
                 options.KustoTable,
-                options.IngestPartitionColumns);
+                options.CreationTime);
 
             return new MainParameterization(
                 options.ContinuousRun,
