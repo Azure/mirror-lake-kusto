@@ -2,6 +2,7 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
+using Azure.Storage.Files.DataLake;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,9 +17,16 @@ namespace MirrorLakeKusto.Storage
         private const string TEMP_CHECKPOINT_BLOB = "temp-index.csv";
 
         private readonly AppendBlobClient _blobClient;
-        private volatile int _blockCount = 0;
+        private readonly TokenCredential _credential;
+        private volatile int _blockCount;
 
+        #region Constructors
         public CheckpointGateway(Uri blobUri, TokenCredential credential)
+            : this(blobUri, credential, 0)
+        {
+        }
+
+        private CheckpointGateway(Uri blobUri, TokenCredential credential, int blockCount)
         {
             var builder = new BlobUriBuilder(blobUri);
 
@@ -28,12 +36,10 @@ namespace MirrorLakeKusto.Storage
             blobUri = builder.ToUri();
 
             _blobClient = new AppendBlobClient(blobUri, credential);
+            _credential = credential;
+            _blockCount = blockCount;
         }
-
-        public CheckpointGateway(AppendBlobClient blobClient)
-        {
-            _blobClient = blobClient;
-        }
+        #endregion
 
         public Uri BlobUri => _blobClient.Uri;
 
@@ -57,11 +63,12 @@ namespace MirrorLakeKusto.Storage
         public async Task<CheckpointGateway> GetTemporaryCheckpointGatewayAsync(
             CancellationToken ct)
         {
-            var parentUrl = Path.GetDirectoryName(_blobClient.Uri.ToString())!;
-            var tempBlobUrl = Path.Combine(parentUrl, TEMP_CHECKPOINT_BLOB);
-            var tempBlob =
-                _blobClient.GetParentBlobContainerClient().GetAppendBlobClient(tempBlobUrl);
-            var tempCheckpointGateway = new CheckpointGateway(tempBlob);
+            var tempSegments = _blobClient.Uri.Segments
+                .Take(_blobClient.Uri.Segments.Length - 1)
+                .Append(TEMP_CHECKPOINT_BLOB);
+            var tempPath = string.Join(string.Empty, tempSegments);
+            var tempBlobUrl = new Uri($"https://{_blobClient.Uri.Authority}{tempPath}");
+            var tempCheckpointGateway = new CheckpointGateway(tempBlobUrl, _credential);
 
             await tempCheckpointGateway.DeleteIfExistsAsync(ct);
             await tempCheckpointGateway.CreateAsync(ct);
@@ -84,6 +91,16 @@ namespace MirrorLakeKusto.Storage
                 await _blobClient.AppendBlockAsync(stream, cancellationToken: ct);
             }
             Interlocked.Increment(ref _blockCount);
+        }
+
+        public async Task<CheckpointGateway> MoveAsync(Uri destinationUri, CancellationToken ct)
+        {
+            var currentFile = new DataLakeFileClient(_blobClient.Uri, _credential);
+            var destinationFile = new DataLakeFileClient(destinationUri);
+
+            await currentFile.RenameAsync(destinationFile.Path, cancellationToken: ct);
+
+            return new CheckpointGateway(destinationUri, _credential, _blockCount);
         }
     }
 }
