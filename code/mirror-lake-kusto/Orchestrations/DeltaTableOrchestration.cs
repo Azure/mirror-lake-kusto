@@ -18,6 +18,7 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly TableStatus _tableStatus;
         private readonly DeltaTableGateway _deltaTableGateway;
         private readonly DatabaseGateway _databaseGateway;
+        private readonly string? _creationTime;
         private readonly bool _continuousRun;
         private readonly bool _isFreeCluster;
 
@@ -33,6 +34,7 @@ namespace MirrorLakeKusto.Orchestrations
             _tableStatus = tableStatus;
             _deltaTableGateway = deltaTableGateway;
             _databaseGateway = databaseGateway;
+            _creationTime = creationTime;
             _continuousRun = continuousRun;
             _isFreeCluster = isFreeCluster;
             KustoDatabaseName = databaseName;
@@ -148,6 +150,7 @@ namespace MirrorLakeKusto.Orchestrations
                 stagingTable,
                 _tableStatus,
                 logs.StartTxId,
+                _creationTime,
                 ct);
             await BlobStagingOrchestration.EnsureAllStagedAsync(
                 _databaseGateway,
