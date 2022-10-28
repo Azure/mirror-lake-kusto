@@ -244,6 +244,10 @@ namespace MirrorLakeKusto.Orchestrations
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
         {
+            var creationTime = items.First().InternalState!.AddInternalState!.CreationTime;
+            var creationTimeText = creationTime == null
+                ? string.Empty
+                : $", creationTime='{creationTime.Value.ToString("yyyy-mmm-ddTHH:mm:ss.ffff")}'";
             var urlList = items.Select(i => i.BlobPath!);
             var urlListText = string.Join(
                 ", " + Environment.NewLine,
@@ -264,6 +268,7 @@ namespace MirrorLakeKusto.Orchestrations
 {ingestionMappingText}
 ]
 ```
+{creationTimeText}
 )";
             //  Ingest through Query Engine
             var ingestResults = await _databaseGateway.ExecuteCommandAsync(

@@ -106,20 +106,23 @@ namespace MirrorLakeKusto.Orchestrations
         {
             var itemsToAnalyze = _itemsToAnalyze;
 
-            Trace.WriteLine($"Analyzing {_itemsToAnalyze.Count()} blobs");
-
-            if (_creationTimeExpression != null
-                && _stagingTable.PartitionColumns != null
-                && _stagingTable.PartitionColumns.Count() > 0)
+            if (itemsToAnalyze.Any())
             {
-                itemsToAnalyze = await AnalyzeCreationTimesAsync(itemsToAnalyze, ct);
+                Trace.WriteLine($"Analyzing {_itemsToAnalyze.Count()} blobs");
+
+                if (_creationTimeExpression != null
+                    && _stagingTable.PartitionColumns != null
+                    && _stagingTable.PartitionColumns.Count() > 0)
+                {
+                    itemsToAnalyze = await AnalyzeCreationTimesAsync(itemsToAnalyze, ct);
+                }
+
+                var newItems = itemsToAnalyze
+                    .Select(i => i.UpdateState(TransactionItemState.Analyzed))
+                    .ToImmutableArray();
+
+                await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }
-
-            var newItems = itemsToAnalyze
-                .Select(i => i.UpdateState(TransactionItemState.Analyzed))
-                .ToImmutableArray();
-
-            await _tableStatus.PersistNewItemsAsync(newItems, ct);
         }
         #endregion
 
