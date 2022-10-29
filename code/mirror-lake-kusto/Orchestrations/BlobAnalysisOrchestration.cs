@@ -60,6 +60,7 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly TableDefinition _stagingTable;
         private readonly TableStatus _tableStatus;
         private readonly string? _creationTimeExpression;
+        private readonly DateTime? _goBackDate;
         private readonly IImmutableList<TransactionItem> _itemsToAnalyze;
 
         #region Constructors
@@ -69,6 +70,7 @@ namespace MirrorLakeKusto.Orchestrations
             TableStatus tableStatus,
             long startTxId,
             string? creationTimeExpression,
+            DateTime? goBackDate,
             CancellationToken ct)
         {
             var orchestration = new BlobAnalysisOrchestration(
@@ -76,7 +78,8 @@ namespace MirrorLakeKusto.Orchestrations
                 stagingTable,
                 tableStatus,
                 startTxId,
-                creationTimeExpression);
+                creationTimeExpression,
+                goBackDate);
 
             await orchestration.RunAsync(ct);
         }
@@ -86,7 +89,8 @@ namespace MirrorLakeKusto.Orchestrations
             TableDefinition stagingTable,
             TableStatus tableStatus,
             long startTxId,
-            string? creationTimeExpression)
+            string? creationTimeExpression,
+            DateTime? goBackDate)
         {
             var logs = tableStatus.GetBatch(startTxId);
             var itemsToAnalyze = logs.Adds
@@ -98,6 +102,7 @@ namespace MirrorLakeKusto.Orchestrations
             _tableStatus = tableStatus;
             _creationTimeExpression = creationTimeExpression;
             _itemsToAnalyze = itemsToAnalyze;
+            _goBackDate = goBackDate;
         }
         #endregion
 
@@ -115,16 +120,43 @@ namespace MirrorLakeKusto.Orchestrations
                     && _stagingTable.PartitionColumns.Count() > 0)
                 {
                     itemsToAnalyze = await AnalyzeCreationTimesAsync(itemsToAnalyze, ct);
+                    itemsToAnalyze = AnalyzeRetention(itemsToAnalyze);
                 }
 
                 var newItems = itemsToAnalyze
-                    .Select(i => i.UpdateState(TransactionItemState.Analyzed))
+                    .Select(i => i.State == TransactionItemState.Initial
+                    ? i.UpdateState(TransactionItemState.Analyzed)
+                    : i)
                     .ToImmutableArray();
 
                 await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }
         }
         #endregion
+
+        private IImmutableList<TransactionItem> AnalyzeRetention(
+            IImmutableList<TransactionItem> itemsToAnalyze)
+        {
+            if (_goBackDate == null)
+            {
+                return itemsToAnalyze;
+            }
+            else
+            {
+                var newItems = itemsToAnalyze
+                    .Select(i => new
+                    {
+                        Item = i,
+                        CreationTime = i.InternalState!.AddInternalState!.CreationTime
+                    })
+                    .Select(i => i.CreationTime != null && i.CreationTime < _goBackDate
+                    ? i.Item.UpdateState(TransactionItemState.Skipped)
+                    : i.Item)
+                    .ToImmutableArray();
+
+                return newItems;
+            }
+        }
 
         private async Task<IImmutableList<TransactionItem>> AnalyzeCreationTimesAsync(
             IImmutableList<TransactionItem> itemsToAnalyze,

@@ -71,6 +71,7 @@ namespace MirrorLakeKusto.Orchestrations
                             tableParameterizationMap[t].DeltaTableStorageUrl),
                         db.Gateway,
                         tableParameterizationMap[t].CreationTime,
+                        tableParameterizationMap[t].GoBack,
                         parameters.ContinuousRun,
                         isFreeCluster));
 

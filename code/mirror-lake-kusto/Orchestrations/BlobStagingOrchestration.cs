@@ -101,7 +101,8 @@ namespace MirrorLakeKusto.Orchestrations
             long startTxId)
         {
             var logs = tableStatus.GetBatch(startTxId);
-            var itemsToIngest = logs.Adds;
+            var itemsToIngest = logs.Adds
+                .Where(i => i.State == TransactionItemState.Analyzed);
             var nonEmptyPartitions = itemsToIngest
                 .Where(i => i.PartitionValues != null)
                 .GroupBy(i => i.PartitionValues!, new PartitionValuesComparer());

@@ -57,7 +57,8 @@ namespace MirrorLakeKusto.Orchestrations
         private async Task<IEnumerable<TransactionItem>> LoadExtentsAsync(CancellationToken ct)
         {
             var toAdd = _logs.Adds
-                .Where(a => a.State != TransactionItemState.Done);
+                .Where(a => a.State != TransactionItemState.Done
+                && a.State != TransactionItemState.Skipped);
 
             if (toAdd.Any())
             {
