@@ -174,10 +174,7 @@ namespace MirrorLakeKusto.Orchestrations
                 .Select(i => i.PartitionArray!)
                 .Distinct(new PartitionValuesComparer())
                 .ToImmutableArray();
-            var creationTimes = await ComputeCreationTimesAsync(partitionValues, ct);
-            var creationTimeMap = partitionValues
-                .Zip(creationTimes, (p, t) => new { Values = p, Time = t })
-                .ToImmutableDictionary(z => z.Values, z => z.Time, new PartitionValuesComparer());
+            var creationTimeMap = await ComputeCreationTimeMapAsync(partitionValues, ct);
             var newItems = items
                 .Select(i => creationTimeMap.TryGetValue(i.PartitionArray!, out var time)
                 ? i.Item.Clone(j => j.InternalState!.AddInternalState!.CreationTime = time)
@@ -187,7 +184,8 @@ namespace MirrorLakeKusto.Orchestrations
             return newItems;
         }
 
-        private async Task<IImmutableList<DateTime>> ComputeCreationTimesAsync(
+        private async Task<IImmutableDictionary<IImmutableList<string>, DateTime>>
+            ComputeCreationTimeMapAsync(
             IImmutableList<IImmutableList<string>> partitionValues,
             CancellationToken ct)
         {
@@ -214,17 +212,25 @@ namespace MirrorLakeKusto.Orchestrations
                 }
                 var queryText = @$"declare query_parameters({parameterDeclarationText});
 {string.Join("| union ", rowConstruct)}
-| project Result={_creationTimeExpression}";
+| extend Result={_creationTimeExpression}";
 
                 try
                 {
                     var results = await _databaseGateway.ExecuteQueryAsync(
                         queryText,
-                        r => (DateTime)r["Result"],
+                        r => new
+                        {
+                            Result = (DateTime)r["Result"],
+                            Partition = Enumerable.Range(0, r.FieldCount - 1)
+                            .Select(i => (string)r[i])
+                            .ToImmutableArray()
+                        },
                         properties,
                         ct);
+                    var map = results
+                        .ToImmutableDictionary(r => r.Partition, r => r.Result, new PartitionValuesComparer());
 
-                    return results;
+                    return map;
                 }
                 catch (Exception ex)
                 {
@@ -233,7 +239,7 @@ namespace MirrorLakeKusto.Orchestrations
             }
             else
             {
-                return ImmutableArray<DateTime>.Empty;
+                return ImmutableDictionary<IImmutableList<string>, DateTime>.Empty;
             }
         }
 
