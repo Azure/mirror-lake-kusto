@@ -307,12 +307,28 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 var createTableText = $".create-merge table {_tableStatus.TableName}"
                     + $" ({stagingTable.KustoSchema})";
+                //  Don't delete anything in the table
+                var retentionPolicyText =
+                    _isFreeCluster && _goBack != null
+                    ? string.Empty
+                    : @$".alter table {_tableStatus.TableName} policy retention 
+```
+{{
+  ""SoftDeletePeriod"": ""{(int)DateTime.Now.Subtract(_goBack!.Value).Days}.00:00:00""
+}}
+```";
+                var commandText = @$"
+.execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
+{createTableText}
+
+{retentionPolicyText}
+";
 
                 Trace.TraceInformation(
                     "Updating schema of Kusto table "
                     + $"'{KustoDatabaseName}.{_tableStatus.TableName}'");
 
-                await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
+                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
                 await _tableStatus.PersistNewItemsAsync(
                     new[] { metadata.UpdateState(TransactionItemState.Done) },
                     ct);
