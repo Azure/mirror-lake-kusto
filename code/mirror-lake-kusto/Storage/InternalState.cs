@@ -10,10 +10,10 @@ namespace MirrorLakeKusto.Storage
 {
     internal class InternalState
     {
-        public StagingTableInternalState? StagingTableInternalState { get; set; }
+        public StagingTableInternalState? StagingTable { get; set; }
 
-        public AddInternalState? AddInternalState { get; set; }
+        public AddInternalState? Add { get; set; }
 
-        public SchemaInternalState? SchemaInternalState { get; set; }
+        public SchemaInternalState? Schema { get; set; }
     }
 }

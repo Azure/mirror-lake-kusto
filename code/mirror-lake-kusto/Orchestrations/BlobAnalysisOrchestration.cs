@@ -147,7 +147,7 @@ namespace MirrorLakeKusto.Orchestrations
                     .Select(i => new
                     {
                         Item = i,
-                        CreationTime = i.InternalState!.AddInternalState!.CreationTime
+                        CreationTime = i.InternalState!.Add!.CreationTime
                     })
                     .Select(i => i.CreationTime != null && i.CreationTime < _goBackDate
                     ? i.Item.UpdateState(TransactionItemState.Skipped)
@@ -177,7 +177,7 @@ namespace MirrorLakeKusto.Orchestrations
             var creationTimeMap = await ComputeCreationTimeMapAsync(partitionValues, ct);
             var newItems = items
                 .Select(i => creationTimeMap.TryGetValue(i.PartitionArray!, out var time)
-                ? i.Item.Clone(j => j.InternalState!.AddInternalState!.CreationTime = time)
+                ? i.Item.Clone(j => j.InternalState!.Add!.CreationTime = time)
                 : i.Item)
                 .ToImmutableList();
 
