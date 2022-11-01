@@ -12,6 +12,5 @@ vehiclesClean=vehicles.select(
     col(vehicles.columns[4]).alias('Model'),
     col(vehicles.columns[5]).alias('NewUsed'))
 
-
 #	Persist the range as a delta table
 vehiclesClean.write.partitionBy("ModelYear").format("delta").save("<ROOT>/delta")
