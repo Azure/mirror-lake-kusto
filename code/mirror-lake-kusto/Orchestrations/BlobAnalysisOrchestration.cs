@@ -176,8 +176,8 @@ namespace MirrorLakeKusto.Orchestrations
                 .ToImmutableArray();
             var creationTimeMap = await ComputeCreationTimeMapAsync(partitionValues, ct);
             var newItems = items
-                .Select(i => creationTimeMap.TryGetValue(i.PartitionArray!, out var time)
-                ? i.Item.Clone(j => j.InternalState!.Add!.CreationTime = time)
+                .Select(i => i.PartitionArray!=null
+                ? i.Item.Clone(j => j.InternalState!.Add!.CreationTime = creationTimeMap[i.PartitionArray!])
                 : i.Item)
                 .ToImmutableList();
 
