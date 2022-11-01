@@ -59,7 +59,7 @@ namespace MirrorLakeKusto.Parameters
 
         private static DateTime? GetDate(string? goBack)
         {
-            if (goBack == null)
+            if (string.IsNullOrWhiteSpace(goBack))
             {
                 return null;
             }

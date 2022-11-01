@@ -115,7 +115,7 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 Trace.WriteLine($"Analyzing {_itemsToAnalyze.Count()} blobs");
 
-                if (_creationTimeExpression != null
+                if (string.IsNullOrWhiteSpace(_creationTimeExpression)
                     && _stagingTable.PartitionColumns != null
                     && _stagingTable.PartitionColumns.Count() > 0)
                 {
