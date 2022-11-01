@@ -308,7 +308,7 @@ namespace MirrorLakeKusto.Orchestrations
                 var createTableText = $".create-merge table {_tableStatus.TableName}"
                     + $" ({stagingTable.KustoSchema})";
                 var retentionPolicyText =
-                    _isFreeCluster || _goBack != null
+                    _isFreeCluster || _goBack == null
                     ? string.Empty
                     : @$".alter table {_tableStatus.TableName} policy retention 
 ```
