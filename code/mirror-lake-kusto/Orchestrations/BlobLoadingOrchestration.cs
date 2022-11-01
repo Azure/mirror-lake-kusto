@@ -121,16 +121,20 @@ to table {_tableStatus.TableName}";
                         IngestionTime = m.Add.InternalState!.Add!.IngestionTime!,
                         BlobPath = m.Remove.BlobPath!
                     });
-                var blobQueriesListText = toDelete
-                    .Select(d => $"{_tableStatus.TableName} "
-                    + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
-                    + $" and ingestion_time()==datetime({d.IngestionTime})");
-                var blobQueryText =
-                    string.Join($"{Environment.NewLine}union ", blobQueriesListText);
-                var commandText = @$".delete table {_tableStatus.TableName} records <|
+
+                if(toDelete.Any())
+                {
+                    var blobQueriesListText = toDelete
+                        .Select(d => $"{_tableStatus.TableName} "
+                        + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
+                        + $" and ingestion_time()==datetime({d.IngestionTime})");
+                    var blobQueryText =
+                        string.Join($"{Environment.NewLine}union ", blobQueriesListText);
+                    var commandText = @$".delete table {_tableStatus.TableName} records <|
 {blobQueryText}";
 
-                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+                    await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+                }
 
                 var removed = matchHistory
                     .Where(m => m.ToDelete)
