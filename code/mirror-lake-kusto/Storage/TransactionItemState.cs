@@ -10,6 +10,7 @@ namespace MirrorLakeKusto.Storage
     {
         Initial,
         Analyzed,
+        Skipped,
         Done,
         QueuedForIngestion,
         Staged

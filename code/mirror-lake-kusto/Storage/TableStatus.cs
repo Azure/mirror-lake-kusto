@@ -118,7 +118,7 @@ namespace MirrorLakeKusto.Storage
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
         {   //  Update before persisting
-            foreach(var i in items)
+            foreach (var i in items)
             {
                 _statuses[i.GetItemKey()] = i;
             }
@@ -128,7 +128,8 @@ namespace MirrorLakeKusto.Storage
 
         private static bool IsComplete(TransactionItemState state)
         {
-            return state == TransactionItemState.Done;
+            return state == TransactionItemState.Done
+                || state == TransactionItemState.Skipped;
         }
     }
 }

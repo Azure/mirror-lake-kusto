@@ -37,5 +37,8 @@ namespace MirrorLakeKusto
 
         [Option('t', "table", Required = false, HelpText = "Kusto Table")]
         public string KustoTable { get; set; } = string.Empty;
+
+        [Option('g', "go-back", Required = false, HelpText = "What point in time to go back")]
+        public string? GoBack { get; set; }
     }
 }

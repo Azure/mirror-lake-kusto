@@ -57,14 +57,15 @@ namespace MirrorLakeKusto.Orchestrations
         private async Task<IEnumerable<TransactionItem>> LoadExtentsAsync(CancellationToken ct)
         {
             var toAdd = _logs.Adds
-                .Where(a => a.State != TransactionItemState.Done);
+                .Where(a => a.State != TransactionItemState.Done
+                && a.State != TransactionItemState.Skipped);
 
             if (toAdd.Any())
             {
                 Trace.WriteLine($"Loading {toAdd.Count()} blobs");
 
                 var extentIds = toAdd
-                    .Select(a => a.InternalState.AddInternalState!.StagingExtentId)
+                    .Select(a => a.InternalState.Add!.StagingExtentId)
                     .Distinct()
                     .ToImmutableArray();
                 var extentIdsText = string.Join(", ", extentIds.Select(e => $"'{e}'"));
@@ -79,12 +80,13 @@ to table {_tableStatus.TableName}";
             var newAdds = toAdd
                 .Select(a => a.UpdateState(TransactionItemState.Done))
                 .Select(a => a.Clone(
-                    a => a.InternalState.AddInternalState!.StagingExtentId = null));
+                    a => a.InternalState.Add!.StagingExtentId = null));
 
             return newAdds;
         }
 
-        private async Task<IEnumerable<TransactionItem>> RemoveBlobPathsAsync(CancellationToken ct)
+        private async Task<IImmutableList<TransactionItem>> RemoveBlobPathsAsync(
+            CancellationToken ct)
         {
             var toRemove = _logs.Removes
                 .Where(r => r.State != TransactionItemState.Done);
@@ -93,39 +95,60 @@ to table {_tableStatus.TableName}";
             {
                 Trace.WriteLine($"Removing {toRemove.Count()} blobs");
 
-                var blobPathsToRemove = toRemove.Select(b => b.BlobPath).ToHashSet();
+                var toRemoveIndex = toRemove.ToImmutableDictionary(r => r.BlobPath!, r => r);
                 var historicalAdds = _tableStatus.GetHistorical(_logs.StartTxId).Adds;
-                var data = historicalAdds
-                    .Zip(Enumerable.Range(0, historicalAdds.Count), (add, index) => new { add, index })
-                    .Where(a => blobPathsToRemove.Contains(a.add.BlobPath))
+                var matchHistory = historicalAdds
+                    .Where(a => toRemoveIndex.ContainsKey(a.BlobPath!))
                     .Select(a => new
                     {
-                        ParameterName = $"IngestionTime{a.index}",
-                        BlobPath = a.add.BlobPath,
-                        IngestionTime = a.add.InternalState.AddInternalState!.IngestionTime
+                        Add = a,
+                        Remove = toRemoveIndex[a.BlobPath!],
+                        ToDelete = a.State != TransactionItemState.Skipped
                     })
                     .ToImmutableArray();
 
-                Debug.Assert(
-                    data.Length == blobPathsToRemove.Count,
-                    "Couldn't find all past adds corresponding to removes");
+                if (matchHistory.Length != toRemoveIndex.Count)
+                {
+                    throw new MirrorException(
+                        "Couldn't find all past adds corresponding to removes:  "
+                        + $"missing {toRemoveIndex.Count - matchHistory.Length} blobs");
+                }
 
-                var blobQueriesListText = data
-                    .Select(d => $"{_tableStatus.TableName} "
-                    + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
-                    + $" and ingestion_time()==datetime({d.IngestionTime})");
-                var blobQueryText =
-                    string.Join($"{Environment.NewLine}union ", blobQueriesListText);
-                var commandText = @$".delete table {_tableStatus.TableName} records <|
+                var toDelete = matchHistory
+                    .Where(m => m.ToDelete)
+                    .Select(m => new
+                    {
+                        IngestionTime = m.Add.InternalState!.Add!.IngestionTime!,
+                        BlobPath = m.Remove.BlobPath!
+                    });
+
+                if(toDelete.Any())
+                {
+                    var blobQueriesListText = toDelete
+                        .Select(d => $"{_tableStatus.TableName} "
+                        + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
+                        + $" and ingestion_time()==datetime({d.IngestionTime})");
+                    var blobQueryText =
+                        string.Join($"{Environment.NewLine}union ", blobQueriesListText);
+                    var commandText = @$".delete table {_tableStatus.TableName} records <|
 {blobQueryText}";
 
-                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+                    await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
+                }
+
+                var removed = matchHistory
+                    .Where(m => m.ToDelete)
+                    .Select(m => m.Remove.UpdateState(TransactionItemState.Done));
+                var skipped = matchHistory
+                    .Where(m => !m.ToDelete)
+                    .Select(m => m.Remove.UpdateState(TransactionItemState.Skipped));
+
+                return removed.Concat(skipped).ToImmutableArray();
             }
-
-            var newRemoves = toRemove
-                .Select(a => a.UpdateState(TransactionItemState.Done));
-
-            return newRemoves;
+            else
+            {
+                return ImmutableArray<TransactionItem>.Empty;
+            }
         }
         #endregion
     }

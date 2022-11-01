@@ -60,6 +60,7 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly TableDefinition _stagingTable;
         private readonly TableStatus _tableStatus;
         private readonly string? _creationTimeExpression;
+        private readonly DateTime? _goBackDate;
         private readonly IImmutableList<TransactionItem> _itemsToAnalyze;
 
         #region Constructors
@@ -69,6 +70,7 @@ namespace MirrorLakeKusto.Orchestrations
             TableStatus tableStatus,
             long startTxId,
             string? creationTimeExpression,
+            DateTime? goBackDate,
             CancellationToken ct)
         {
             var orchestration = new BlobAnalysisOrchestration(
@@ -76,7 +78,8 @@ namespace MirrorLakeKusto.Orchestrations
                 stagingTable,
                 tableStatus,
                 startTxId,
-                creationTimeExpression);
+                creationTimeExpression,
+                goBackDate);
 
             await orchestration.RunAsync(ct);
         }
@@ -86,7 +89,8 @@ namespace MirrorLakeKusto.Orchestrations
             TableDefinition stagingTable,
             TableStatus tableStatus,
             long startTxId,
-            string? creationTimeExpression)
+            string? creationTimeExpression,
+            DateTime? goBackDate)
         {
             var logs = tableStatus.GetBatch(startTxId);
             var itemsToAnalyze = logs.Adds
@@ -98,6 +102,7 @@ namespace MirrorLakeKusto.Orchestrations
             _tableStatus = tableStatus;
             _creationTimeExpression = creationTimeExpression;
             _itemsToAnalyze = itemsToAnalyze;
+            _goBackDate = goBackDate;
         }
         #endregion
 
@@ -110,21 +115,48 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 Trace.WriteLine($"Analyzing {_itemsToAnalyze.Count()} blobs");
 
-                if (_creationTimeExpression != null
+                if (!string.IsNullOrWhiteSpace(_creationTimeExpression)
                     && _stagingTable.PartitionColumns != null
                     && _stagingTable.PartitionColumns.Count() > 0)
                 {
                     itemsToAnalyze = await AnalyzeCreationTimesAsync(itemsToAnalyze, ct);
+                    itemsToAnalyze = AnalyzeRetention(itemsToAnalyze);
                 }
 
                 var newItems = itemsToAnalyze
-                    .Select(i => i.UpdateState(TransactionItemState.Analyzed))
+                    .Select(i => i.State == TransactionItemState.Initial
+                    ? i.UpdateState(TransactionItemState.Analyzed)
+                    : i)
                     .ToImmutableArray();
 
                 await _tableStatus.PersistNewItemsAsync(newItems, ct);
             }
         }
         #endregion
+
+        private IImmutableList<TransactionItem> AnalyzeRetention(
+            IImmutableList<TransactionItem> itemsToAnalyze)
+        {
+            if (_goBackDate == null)
+            {
+                return itemsToAnalyze;
+            }
+            else
+            {
+                var newItems = itemsToAnalyze
+                    .Select(i => new
+                    {
+                        Item = i,
+                        CreationTime = i.InternalState!.Add!.CreationTime
+                    })
+                    .Select(i => i.CreationTime != null && i.CreationTime < _goBackDate
+                    ? i.Item.UpdateState(TransactionItemState.Skipped)
+                    : i.Item)
+                    .ToImmutableArray();
+
+                return newItems;
+            }
+        }
 
         private async Task<IImmutableList<TransactionItem>> AnalyzeCreationTimesAsync(
             IImmutableList<TransactionItem> itemsToAnalyze,
@@ -142,20 +174,18 @@ namespace MirrorLakeKusto.Orchestrations
                 .Select(i => i.PartitionArray!)
                 .Distinct(new PartitionValuesComparer())
                 .ToImmutableArray();
-            var creationTimes = await ComputeCreationTimesAsync(partitionValues, ct);
-            var creationTimeMap = partitionValues
-                .Zip(creationTimes, (p, t) => new { Values = p, Time = t })
-                .ToImmutableDictionary(z => z.Values, z => z.Time, new PartitionValuesComparer());
+            var creationTimeMap = await ComputeCreationTimeMapAsync(partitionValues, ct);
             var newItems = items
-                .Select(i => creationTimeMap.TryGetValue(i.PartitionArray!, out var time)
-                ? i.Item.Clone(j => j.InternalState!.AddInternalState!.CreationTime = time)
+                .Select(i => i.PartitionArray!=null
+                ? i.Item.Clone(j => j.InternalState!.Add!.CreationTime = creationTimeMap[i.PartitionArray!])
                 : i.Item)
                 .ToImmutableList();
 
             return newItems;
         }
 
-        private async Task<IImmutableList<DateTime>> ComputeCreationTimesAsync(
+        private async Task<IImmutableDictionary<IImmutableList<string>, DateTime>>
+            ComputeCreationTimeMapAsync(
             IImmutableList<IImmutableList<string>> partitionValues,
             CancellationToken ct)
         {
@@ -182,17 +212,25 @@ namespace MirrorLakeKusto.Orchestrations
                 }
                 var queryText = @$"declare query_parameters({parameterDeclarationText});
 {string.Join("| union ", rowConstruct)}
-| project Result={_creationTimeExpression}";
+| extend Result={_creationTimeExpression}";
 
                 try
                 {
                     var results = await _databaseGateway.ExecuteQueryAsync(
                         queryText,
-                        r => (DateTime)r["Result"],
+                        r => new
+                        {
+                            Result = (DateTime)r["Result"],
+                            Partition = Enumerable.Range(0, r.FieldCount - 1)
+                            .Select(i => (string)r[i])
+                            .ToImmutableArray()
+                        },
                         properties,
                         ct);
+                    var map = results
+                        .ToImmutableDictionary(r => r.Partition, r => r.Result, new PartitionValuesComparer());
 
-                    return results;
+                    return map;
                 }
                 catch (Exception ex)
                 {
@@ -201,7 +239,7 @@ namespace MirrorLakeKusto.Orchestrations
             }
             else
             {
-                return ImmutableArray<DateTime>.Empty;
+                return ImmutableDictionary<IImmutableList<string>, DateTime>.Empty;
             }
         }
 

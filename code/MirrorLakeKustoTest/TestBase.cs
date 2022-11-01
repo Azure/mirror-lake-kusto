@@ -37,7 +37,8 @@ namespace MirrorLakeKustoTest
             private readonly string _deltaTableFolder;
             private readonly string _kustoTable;
             private readonly Func<string, string> _getResourceFunc;
-            private readonly Func<string, string, string, string, Task> _runMirrorAsync;
+            private readonly Func<string, string, string, string, string?, string?, Task>
+                _runMirrorAsync;
             private readonly SparkSessionHolder _sparkSessionHolder;
             private readonly DbHolder _dbHolder;
 
@@ -47,7 +48,7 @@ namespace MirrorLakeKustoTest
                 string deltaTableFolder,
                 string kustoTable,
                 Func<string, string> getResourceFunc,
-                Func<string, string, string, string, Task> runMirrorAsync,
+                Func<string, string, string, string, string?, string?, Task> runMirrorAsync,
                 SparkSessionHolder sparkSessionHolder,
                 DbHolder dbHolder)
             {
@@ -64,7 +65,7 @@ namespace MirrorLakeKustoTest
             public int TestId { get; }
 
             public string SynapseRootFolder => $"/automated-tests/{_testSetId}/{TestId.ToString("D4")}";
-            
+
             public string TestDataRootFolder => "/automated-tests-data";
 
             public async Task<SparkStatementOutput> ExecuteSparkCodeAsync(string code)
@@ -82,7 +83,7 @@ namespace MirrorLakeKustoTest
                 return script;
             }
 
-            public async Task RunMirrorAsync()
+            public async Task RunMirrorAsync(string? creationTime = null, string? goBack = null)
             {
                 var containerUrl = GetEnvironmentVariable("mlkContainerUrl");
                 var checkpointBlobUrl = $"{containerUrl}/{SynapseRootFolder}/checkpoint.csv";
@@ -92,7 +93,9 @@ namespace MirrorLakeKustoTest
                     checkpointBlobUrl,
                     deltaTableStorageUrl,
                     _dbHolder.DbName,
-                    _kustoTable);
+                    _kustoTable,
+                    creationTime,
+                    goBack);
             }
 
             public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
@@ -330,10 +333,12 @@ namespace MirrorLakeKustoTest
         }
 
         private async Task RunMirrorAsync(
-            string checkpointBlobUrl,
+            string checkpointFolderUrl,
             string deltaTableStorageUrl,
             string database,
-            string kustoTable)
+            string kustoTable,
+            string? creationTime,
+            string? goBack)
         {
             var ingestionConnectionString = GetIngestionConnectionString();
             var args = new[]
@@ -341,13 +346,17 @@ namespace MirrorLakeKustoTest
                 "-s",
                 deltaTableStorageUrl,
                 "-c",
-                checkpointBlobUrl,
+                checkpointFolderUrl,
                 "-i",
                 ingestionConnectionString,
                 "-d",
                 database,
                 "-t",
-                kustoTable
+                kustoTable,
+                "--creation-time",
+                creationTime ?? string.Empty,
+                "-g",
+                goBack ?? string.Empty
             };
 
             Console.WriteLine($"> mirror-lake-kusto {string.Join(' ', args)}");

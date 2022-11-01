@@ -101,7 +101,8 @@ namespace MirrorLakeKusto.Orchestrations
             long startTxId)
         {
             var logs = tableStatus.GetBatch(startTxId);
-            var itemsToIngest = logs.Adds;
+            var itemsToIngest = logs.Adds
+                .Where(i => i.State == TransactionItemState.Analyzed);
             var nonEmptyPartitions = itemsToIngest
                 .Where(i => i.PartitionValues != null)
                 .GroupBy(i => i.PartitionValues!, new PartitionValuesComparer());
@@ -196,8 +197,8 @@ namespace MirrorLakeKusto.Orchestrations
                             {
                                 var mapValue = extentBlobMap[i.BlobPath!];
 
-                                i.InternalState.AddInternalState!.StagingExtentId = mapValue.extentId;
-                                i.InternalState.AddInternalState!.IngestionTime = mapValue.ingestionTime;
+                                i.InternalState.Add!.StagingExtentId = mapValue.extentId;
+                                i.InternalState.Add!.IngestionTime = mapValue.ingestionTime;
                             }));
                     var newEmptyItems = emptyItems
                         .Select(i => i.UpdateState(TransactionItemState.Done));
@@ -244,7 +245,7 @@ namespace MirrorLakeKusto.Orchestrations
             IEnumerable<TransactionItem> items,
             CancellationToken ct)
         {
-            var creationTime = items.First().InternalState!.AddInternalState!.CreationTime;
+            var creationTime = items.First().InternalState!.Add!.CreationTime;
             var creationTimeText = creationTime == null
                 ? string.Empty
                 : $", creationTime='{creationTime.Value.ToString("yyyy-MM-ddTHH:mm:ss")}'";

@@ -19,6 +19,7 @@ namespace MirrorLakeKusto.Orchestrations
         private readonly DeltaTableGateway _deltaTableGateway;
         private readonly DatabaseGateway _databaseGateway;
         private readonly string? _creationTime;
+        private readonly DateTime? _goBack;
         private readonly bool _continuousRun;
         private readonly bool _isFreeCluster;
 
@@ -28,6 +29,7 @@ namespace MirrorLakeKusto.Orchestrations
             DeltaTableGateway deltaTableGateway,
             DatabaseGateway databaseGateway,
             string? creationTime,
+            DateTime? goBack,
             bool continuousRun,
             bool isFreeCluster)
         {
@@ -35,6 +37,7 @@ namespace MirrorLakeKusto.Orchestrations
             _deltaTableGateway = deltaTableGateway;
             _databaseGateway = databaseGateway;
             _creationTime = creationTime;
+            _goBack = goBack;
             _continuousRun = continuousRun;
             _isFreeCluster = isFreeCluster;
             KustoDatabaseName = databaseName;
@@ -93,7 +96,7 @@ namespace MirrorLakeKusto.Orchestrations
                 .GetTableDefinition(startTxId)
                 .WithTrackingColumns();
             var stagingTableName =
-                logs.StagingTable!.InternalState.StagingTableInternalState!.StagingTableName!;
+                logs.StagingTable!.InternalState.StagingTable!.StagingTableName!;
             var stagingTable = mainTable.RenameTable(stagingTableName);
             var isStaging = await EnsureStagingTableAsync(
                 stagingTable,
@@ -151,6 +154,7 @@ namespace MirrorLakeKusto.Orchestrations
                 _tableStatus,
                 logs.StartTxId,
                 _creationTime,
+                _goBack,
                 ct);
             await BlobStagingOrchestration.EnsureAllStagedAsync(
                 _databaseGateway,
@@ -182,7 +186,7 @@ namespace MirrorLakeKusto.Orchestrations
             var stagingTableName = CreateStagingTableName(log.StartTxId);
             var stagingTable = log.StagingTable!
                 .UpdateState(TransactionItemState.Initial)
-                .Clone(s => s.InternalState.StagingTableInternalState!.StagingTableName = stagingTableName);
+                .Clone(s => s.InternalState.StagingTable!.StagingTableName = stagingTableName);
             var resetAdds = log.Adds
                 .Where(a => a.State != TransactionItemState.Initial)
                 .Select(a => a.UpdateState(TransactionItemState.Initial));
@@ -200,7 +204,7 @@ namespace MirrorLakeKusto.Orchestrations
             CancellationToken ct)
         {
             var stagingTableName =
-                stagingTable.InternalState.StagingTableInternalState!.StagingTableName;
+                stagingTable.InternalState.StagingTable!.StagingTableName;
             var commandText = $".drop table {stagingTableName} ifexists";
 
             await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
@@ -303,12 +307,27 @@ namespace MirrorLakeKusto.Orchestrations
             {
                 var createTableText = $".create-merge table {_tableStatus.TableName}"
                     + $" ({stagingTable.KustoSchema})";
+                var retentionPolicyText =
+                    _isFreeCluster || _goBack == null
+                    ? string.Empty
+                    : @$".alter table {_tableStatus.TableName} policy retention 
+```
+{{
+  ""SoftDeletePeriod"": ""{(int)DateTime.Now.Subtract(_goBack!.Value).Days}.00:00:00""
+}}
+```";
+                var commandText = @$"
+.execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
+{createTableText}
+
+{retentionPolicyText}
+";
 
                 Trace.TraceInformation(
                     "Updating schema of Kusto table "
                     + $"'{KustoDatabaseName}.{_tableStatus.TableName}'");
 
-                await _databaseGateway.ExecuteCommandAsync(createTableText, r => 0, ct);
+                await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
                 await _tableStatus.PersistNewItemsAsync(
                     new[] { metadata.UpdateState(TransactionItemState.Done) },
                     ct);

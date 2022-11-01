@@ -265,7 +265,7 @@ namespace MirrorLakeKusto.Storage
                 null,
                 null,
                 null,
-                new InternalState { StagingTableInternalState = stagingTableInternalState });
+                new InternalState { StagingTable = stagingTableInternalState });
         }
 
         public static TransactionItem CreateAddItem(
@@ -292,7 +292,7 @@ namespace MirrorLakeKusto.Storage
                 recordCount,
                 null,
                 null,
-                new InternalState { AddInternalState = new AddInternalState() });
+                new InternalState { Add = new AddInternalState() });
         }
 
         public static TransactionItem CreateRemoveItem(
@@ -345,7 +345,7 @@ namespace MirrorLakeKusto.Storage
                 null,
                 partitionColumns,
                 schema,
-                new InternalState { SchemaInternalState = schemaInternalState });
+                new InternalState { Schema = schemaInternalState });
         }
         #endregion
 

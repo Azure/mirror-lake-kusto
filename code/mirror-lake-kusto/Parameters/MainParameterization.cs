@@ -47,7 +47,8 @@ namespace MirrorLakeKusto.Parameters
                 deltaTableStorageUrl,
                 options.Database,
                 options.KustoTable,
-                options.CreationTime);
+                options.CreationTime,
+                GetDate(options.GoBack));
 
             return new MainParameterization(
                 options.ContinuousRun,
@@ -56,8 +57,53 @@ namespace MirrorLakeKusto.Parameters
                 new[] { deltaTable });
         }
 
+        private static DateTime? GetDate(string? goBack)
+        {
+            if (string.IsNullOrWhiteSpace(goBack))
+            {
+                return null;
+            }
+            else
+            {
+                var segments = goBack.Split(new[] { '-', '/' });
+
+                if (segments.Length != 3)
+                {
+                    throw new MirrorException(
+                        $"Go back date '{goBack}' should have 3 segments separated by '-' or '/'");
+                }
+
+                var numbers = segments
+                    .Select(s => int.TryParse(s, out var n) ? (int?)n : null)
+                    .ToImmutableArray();
+
+                if (numbers.Any(n => n == null))
+                {
+                    throw new MirrorException(
+                        $"Go back date '{goBack}' have segments that aren't numbers");
+                }
+
+                var day = numbers[0]!.Value;
+                var month = numbers[1]!.Value;
+                var year = numbers[2]!.Value;
+
+                try
+                {
+                    var date = new DateTime(year, month, day);
+
+                    return date;
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    throw new MirrorException(
+                        $"Go back date '{goBack}' isn't valid date",
+                        ex);
+                }
+            }
+        }
+
         public bool ContinuousRun { get; }
-        
+
         public string ClusterIngestionConnectionString { get; }
 
         public Uri CheckpointBlobFolderUrl { get; }
