@@ -64,7 +64,8 @@ namespace MirrorLakeKusto.Storage
                 var logs = _statuses.Values
                     .Where(s => s.Action != TransactionItemAction.StagingTable)
                     .GroupBy(s => s.StartTxId)
-                    .Select(g => new TransactionLog(g));
+                    .Select(g => new TransactionLog(g))
+                    .OrderBy(t => t.StartTxId);
                 var all = TransactionLog.Coalesce(logs);
 
                 return all;
