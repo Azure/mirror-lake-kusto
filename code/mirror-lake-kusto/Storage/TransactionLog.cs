@@ -73,13 +73,12 @@ namespace MirrorLakeKusto.Storage
             {
                 throw new NotImplementedException();
             }
-            if (second.StagingTable != null)
-            {
-                throw new NotImplementedException();
-            }
 
             var allAdds = Adds.Concat(second.Adds);
             var allRemoves = Removes.Concat(second.Removes);
+            var allStagingTables = new[] { StagingTable, second.StagingTable };
+            var remainingStagingTables = allStagingTables
+                .Where(s => s != null && s.State != TransactionItemState.Done);
             var addIndex = allAdds
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
@@ -100,9 +99,14 @@ namespace MirrorLakeKusto.Storage
             var newRemoves = Removes
                 .Select(a => a.Clone(c => action(c)));
 
+            if (remainingStagingTables.Count() > 1)
+            {
+                throw new NotImplementedException();
+            }
+
             return new TransactionLog(
                 Metadata != null ? Metadata.Clone(action) : null,
-                StagingTable != null ? StagingTable.Clone(action) : null,
+                remainingStagingTables.FirstOrDefault(),
                 newAdds,
                 newRemoves);
         }

@@ -122,16 +122,17 @@ to table {_tableStatus.TableName}";
                         BlobPath = m.Remove.BlobPath!
                     });
 
-                if(toDelete.Any())
+                if (toDelete.Any())
                 {
-                    var blobQueriesListText = toDelete
-                        .Select(d => $"{_tableStatus.TableName} "
-                        + $"| where {_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
-                        + $" and ingestion_time()==datetime({d.IngestionTime})");
-                    var blobQueryText =
-                        string.Join($"{Environment.NewLine}union ", blobQueriesListText);
+                    var predicates = toDelete
+                        .Select(d => $"({_stagingTable.BlobPathColumnName}=='{d.BlobPath}'"
+                        + $" and ingestion_time()==datetime({d.IngestionTime}))");
+                    var predicateText =
+                        string.Join($"{Environment.NewLine}or ", predicates);
                     var commandText = @$".delete table {_tableStatus.TableName} records <|
-{blobQueryText}";
+{_tableStatus.TableName}
+| where
+{predicateText}";
 
                     await _databaseGateway.ExecuteCommandAsync(commandText, r => 0, ct);
                 }
