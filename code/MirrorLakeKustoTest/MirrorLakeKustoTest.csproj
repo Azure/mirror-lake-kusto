@@ -19,6 +19,7 @@
     <None Remove="Electric\Scripts\PartitionLoad.py" />
     <None Remove="Electric\Scripts\StraightLoad.py" />
     <None Remove="Simple\Scripts\CheckpointTx.py" />
+    <None Remove="Simple\Scripts\DoingCheckpointTx.py" />
     <None Remove="Simple\Scripts\MultiLineOneColumn.py" />
     <None Remove="Simple\Scripts\OneLineOneColumn.py" />
     <EmbeddedResource Include="Electric\Scripts\DeleteYear2020.py" />
@@ -26,7 +27,7 @@
     <EmbeddedResource Include="Electric\Scripts\PartitionLoad.py" />
     <EmbeddedResource Include="Electric\Scripts\Optimize.py" />
     <EmbeddedResource Include="Electric\Scripts\StraightLoad.py" />
-    <EmbeddedResource Include="Simple\Scripts\CheckpointTx.py" />
+    <EmbeddedResource Include="Simple\Scripts\DoingCheckpointTx.py" />
     <EmbeddedResource Include="Simple\Scripts\MultiLineOneColumn.py" />
     <EmbeddedResource Include="Simple\Scripts\OneLineOneColumn.py" />
   </ItemGroup>
@@ -53,6 +54,9 @@
 
   <ItemGroup>
     <None Update="Properties\launchSettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Simple\Scripts\SetupCheckpointTx.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

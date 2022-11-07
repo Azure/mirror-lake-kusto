@@ -44,12 +44,41 @@ namespace MirrorLakeKustoTest.Simple
         }
 
         [Fact]
-        public async Task CheckpointTx()
+        public async Task CheckpointTxOneShot()
         {
             await using (var session = await GetTestSessionAsync("delta", "Checkpointed"))
             {
-                var script = session.GetResource("CheckpointTx.py");
-                var output = await session.ExecuteSparkCodeAsync(script);
+                var script1 = session.GetResource("SetupCheckpointTx.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+                var script2 = session.GetResource("DoingCheckpointTx.py");
+                var output2 = await session.ExecuteSparkCodeAsync(script1);
+
+                await session.RunMirrorAsync();
+
+                var ids = await session.ExecuteQueryAsync(
+                    "",
+                    r => (long)r["id"]);
+
+                Assert.Equal(11, ids.Count);
+                for (int i = 0; i != 11; ++i)
+                {
+                    Assert.Contains((long)i, ids);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task CheckpointTxWithDelta()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Checkpointed"))
+            {
+                var script1 = session.GetResource("SetupCheckpointTx.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+                
+                await session.RunMirrorAsync();
+                
+                var script2 = session.GetResource("DoingCheckpointTx.py");
+                var output2 = await session.ExecuteSparkCodeAsync(script1);
 
                 await session.RunMirrorAsync();
 
