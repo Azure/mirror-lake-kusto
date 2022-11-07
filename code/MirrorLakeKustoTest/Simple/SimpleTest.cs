@@ -51,7 +51,7 @@ namespace MirrorLakeKustoTest.Simple
                 var script1 = session.GetResource("SetupCheckpointTx.py");
                 var output1 = await session.ExecuteSparkCodeAsync(script1);
                 var script2 = session.GetResource("DoingCheckpointTx.py");
-                var output2 = await session.ExecuteSparkCodeAsync(script1);
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
 
                 await session.RunMirrorAsync();
 
@@ -78,7 +78,7 @@ namespace MirrorLakeKustoTest.Simple
                 await session.RunMirrorAsync();
                 
                 var script2 = session.GetResource("DoingCheckpointTx.py");
-                var output2 = await session.ExecuteSparkCodeAsync(script1);
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
 
                 await session.RunMirrorAsync();
 
@@ -88,6 +88,35 @@ namespace MirrorLakeKustoTest.Simple
 
                 Assert.Equal(11, ids.Count);
                 for (int i = 0; i != 11; ++i)
+                {
+                    Assert.Contains((long)i, ids);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task CheckpointTxWithDelete()
+        {
+            await using (var session = await GetTestSessionAsync("delta", "Checkpointed"))
+            {
+                var script1 = session.GetResource("SetupCheckpointTx.py");
+                var output1 = await session.ExecuteSparkCodeAsync(script1);
+
+                await session.RunMirrorAsync();
+
+                var script2 = session.GetResource("DeleteSetupCheckpointTx.py");
+                var output2 = await session.ExecuteSparkCodeAsync(script2);
+                var script3 = session.GetResource("DoingCheckpointTx.py");
+                var output3 = await session.ExecuteSparkCodeAsync(script3);
+
+                await session.RunMirrorAsync();
+
+                var ids = await session.ExecuteQueryAsync(
+                    "",
+                    r => (long)r["id"]);
+
+                Assert.Equal(11, ids.Count);
+                for (int i = 1; i != 11; ++i)
                 {
                     Assert.Contains((long)i, ids);
                 }

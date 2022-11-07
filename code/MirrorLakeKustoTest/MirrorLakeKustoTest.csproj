@@ -56,6 +56,9 @@
     <None Update="Properties\launchSettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Simple\Scripts\DeleteSetupCheckpointTx.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Simple\Scripts\SetupCheckpointTx.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
