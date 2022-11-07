@@ -157,7 +157,7 @@ namespace MirrorLakeKusto.Storage
             }
 
             return new TransactionLog(
-                Metadata != null ? Metadata.Clone(assignCurrentTx) : null,
+                null,
                 remainingStagingTables.Select(i => i!.Clone(assignCurrentTx)).FirstOrDefault(),
                 newAdds.Select(i => i.Clone(assignCurrentTx)),
                 newRemoves.Select(i => i.Clone(assignCurrentTx)));
