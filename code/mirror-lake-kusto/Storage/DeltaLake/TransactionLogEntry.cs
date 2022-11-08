@@ -443,7 +443,9 @@ namespace MirrorLakeKusto.Storage.DeltaLake
                                 },
                                 Configuration = null,
                                 CreatedTime = creationTimeColumn[j] ?? 0,
-                                PartitionColumns = partitionsColumn[j],
+                                PartitionColumns = partitionsColumn[j]
+                                .Where(c => c != null)
+                                .ToArray(),
                                 SchemaString = schemaStringColumn[j]
                             };
                         }

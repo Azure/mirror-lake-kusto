@@ -1,4 +1,6 @@
-﻿using Kusto.Ingest.Exceptions;
+﻿using Kusto.Cloud.Platform.Utils;
+using Kusto.Ingest.Exceptions;
+using System;
 using System.Collections.Immutable;
 using System.Text.Json;
 
@@ -73,13 +75,12 @@ namespace MirrorLakeKusto.Storage
             {
                 throw new NotImplementedException();
             }
-            if (second.StagingTable != null)
-            {
-                throw new NotImplementedException();
-            }
 
             var allAdds = Adds.Concat(second.Adds);
             var allRemoves = Removes.Concat(second.Removes);
+            var allStagingTables = new[] { StagingTable, second.StagingTable };
+            var remainingStagingTables = allStagingTables
+                .Where(s => s != null && s.State != TransactionItemState.Done);
             var addIndex = allAdds
                 .Select(r => r.BlobPath)
                 .ToImmutableHashSet();
@@ -100,16 +101,66 @@ namespace MirrorLakeKusto.Storage
             var newRemoves = Removes
                 .Select(a => a.Clone(c => action(c)));
 
+            if (remainingStagingTables.Count() > 1)
+            {
+                throw new NotSupportedException();
+            }
+
             return new TransactionLog(
                 Metadata != null ? Metadata.Clone(action) : null,
-                StagingTable != null ? StagingTable.Clone(action) : null,
+                remainingStagingTables.FirstOrDefault(),
                 newAdds,
                 newRemoves);
         }
 
-        public TransactionLog Delta(TransactionLog currentLog)
+        public TransactionLog Delta(TransactionLog previousLog)
         {
-            throw new NotImplementedException();
+            var currentAdds = Adds.ToImmutableDictionary(a => a.BlobPath!, a => a);
+            var previousAdds = previousLog.Adds.ToImmutableDictionary(a => a.BlobPath!, a => a);
+            var currentRemoves = Removes.ToImmutableDictionary(r => r.BlobPath!, r => r);
+            var previousRemoves = previousLog.Removes
+                .ToImmutableDictionary(r => r.BlobPath!, r => r);
+            var newAdds = currentAdds
+                .Where(p => !previousAdds.ContainsKey(p.Key))
+                .Select(p => p.Value)
+                .ToImmutableArray();
+            var newRemoveBlobPaths = previousAdds
+                .Where(p => !currentAdds.ContainsKey(p.Key))
+                .Where(p => !currentRemoves.ContainsKey(p.Key))
+                .Select(p => p.Key)
+                .Concat(currentRemoves.Keys)
+                .ToImmutableHashSet();
+            var newRemoves = newRemoveBlobPaths
+                .Select(p => previousAdds[p])
+                .ToImmutableArray();
+            var brokenRemoveBlobPaths = previousRemoves
+                .Where(p => !newRemoveBlobPaths.Contains(p.Key))
+                .ToImmutableHashSet();
+            var allStagingTables = new[] { StagingTable, previousLog.StagingTable };
+            var remainingStagingTables = allStagingTables
+                .Where(s => s != null && s.State != TransactionItemState.Done);
+            var assignCurrentTx = (TransactionItem i) =>
+            {
+                i.StartTxId = StartTxId;
+                i.EndTxId = EndTxId;
+            };
+
+            if (brokenRemoveBlobPaths.Any())
+            {
+                throw new MirrorException("Log-delta missing past removes:  "
+                    + string.Join(", ", brokenRemoveBlobPaths));
+            }
+            if (!previousLog.Metadata!.PartitionColumns!.SequenceEqual(Metadata!.PartitionColumns!)
+                || !previousLog.Metadata!.Schema!.SequenceEqual(Metadata!.Schema!))
+            {
+                throw new NotSupportedException("Schema changed unsupported");
+            }
+
+            return new TransactionLog(
+                null,
+                remainingStagingTables.Select(i => i!.Clone(assignCurrentTx)).FirstOrDefault(),
+                newAdds.Select(i => i.Clone(assignCurrentTx)),
+                newRemoves.Select(i => i.Clone(assignCurrentTx)));
         }
 
         public static TransactionLog Coalesce(IEnumerable<TransactionLog> txLogs)
