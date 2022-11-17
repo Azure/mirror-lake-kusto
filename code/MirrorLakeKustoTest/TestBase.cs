@@ -679,6 +679,7 @@ namespace MirrorLakeKustoTest
             var dbCreationTaskQueue = new ConcurrentQueue<Task<string>>();
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 ingestionConnectionString,
+                new ClientSecretCredential(tenantId, appId, appSecret),
                 string.Empty);
 
             await Task.WhenAll(dbsDeletionTasks);
