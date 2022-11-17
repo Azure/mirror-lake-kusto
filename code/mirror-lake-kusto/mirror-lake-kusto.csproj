@@ -6,7 +6,7 @@
 		<RootNamespace>MirrorLakeKusto</RootNamespace>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.0.2</Version>
+		<Version>0.0.3</Version>
 		<!--	Important to avoid the trimming warning hell ; since we automate-test everything, we do not need static analysis	-->
 		<ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
 		<AssemblyName>mlk</AssemblyName>
