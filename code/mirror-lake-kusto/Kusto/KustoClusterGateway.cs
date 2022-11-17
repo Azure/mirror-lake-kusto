@@ -1,4 +1,5 @@
-﻿using CommandLine;
+﻿using Azure.Core;
+using CommandLine;
 using Kusto.Data;
 using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
@@ -27,6 +28,7 @@ namespace MirrorLakeKusto.Kusto
         #region Constructors
         public static async Task<KustoClusterGateway> CreateAsync(
             string clusterIngestionConnectionString,
+            TokenCredential credentials,
             string version,
             string? requestDescription = null)
         {
@@ -35,11 +37,10 @@ namespace MirrorLakeKusto.Kusto
             var queryStringBuilder =
                 new KustoConnectionStringBuilder(clusterIngestionConnectionString);
 
-            if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
-            {   //  Enforce Az CLI authentication if user simply provides cluster ingestion URI
-                ingestionStringBuilder = ingestionStringBuilder.WithAadUserPromptAuthentication();
-                queryStringBuilder = queryStringBuilder.WithAadUserPromptAuthentication();
-            }
+            ingestionStringBuilder =
+                ingestionStringBuilder.WithAadAzureTokenCredentialsAuthentication(credentials);
+            queryStringBuilder =
+                queryStringBuilder.WithAadAzureTokenCredentialsAuthentication(credentials);
 
             var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
 

@@ -40,5 +40,8 @@ namespace MirrorLakeKusto
 
         [Option('g', "go-back", Required = false, HelpText = "What point in time to go back")]
         public string? GoBack { get; set; }
+
+        [Option("force-browser-auth", Required = false, HelpText = "Forces browser authentication on all")]
+        public bool ForceBrowserAuth { get; set; } = false;
     }
 }

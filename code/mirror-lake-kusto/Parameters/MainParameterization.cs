@@ -13,12 +13,14 @@ namespace MirrorLakeKusto.Parameters
             bool continuousRun,
             string clusterIngestionConnectionString,
             Uri checkpointBlobFolderUrl,
-            IEnumerable<DeltaTableParameterization> deltaTableParameterizations)
+            IEnumerable<DeltaTableParameterization> deltaTableParameterizations,
+            bool forceBrowserAuth)
         {
             ContinuousRun = continuousRun;
             ClusterIngestionConnectionString = clusterIngestionConnectionString;
             CheckpointBlobFolderUrl = checkpointBlobFolderUrl;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
+            ForceBrowserAuth = forceBrowserAuth;
         }
 
         public static MainParameterization Create(CommandLineOptions options)
@@ -54,7 +56,8 @@ namespace MirrorLakeKusto.Parameters
                 options.ContinuousRun,
                 options.ClusterIngestionConnectionString,
                 checkpointBlobFolderUrl,
-                new[] { deltaTable });
+                new[] { deltaTable },
+                options.ForceBrowserAuth);
         }
 
         private static DateTime? GetDate(string? goBack)
@@ -103,6 +106,8 @@ namespace MirrorLakeKusto.Parameters
         }
 
         public bool ContinuousRun { get; }
+
+        public bool ForceBrowserAuth { get; }
 
         public string ClusterIngestionConnectionString { get; }
 

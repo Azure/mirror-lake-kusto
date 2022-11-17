@@ -27,8 +27,9 @@ namespace MirrorLakeKusto.Orchestrations
             string? requestDescription,
             CancellationToken ct)
         {
-            var storageCredentials =
-                CreateNonSasStorageCredentials(parameters.ClusterIngestionConnectionString);
+            var storageCredentials = CreateNonSasStorageCredentials(
+                parameters.ClusterIngestionConnectionString,
+                parameters.ForceBrowserAuth);
             var globalTableStatusTask = GlobalTableStatus.RetrieveAsync(
                 parameters.CheckpointBlobFolderUrl,
                 storageCredentials,
@@ -36,6 +37,7 @@ namespace MirrorLakeKusto.Orchestrations
                 ct);
             var clusterGateway = await KustoClusterGateway.CreateAsync(
                 parameters.ClusterIngestionConnectionString,
+                storageCredentials,
                 version,
                 requestDescription);
             var isFreeCluster = await clusterGateway.IsFreeClusterAsync(ct);
@@ -82,11 +84,19 @@ namespace MirrorLakeKusto.Orchestrations
         }
 
         private static TokenCredential CreateNonSasStorageCredentials(
-            string clusterIngestionConnectionString)
+            string clusterIngestionConnectionString,
+            bool forceBrowserAuth)
         {
             if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
             {   //  Default, if no credentials are provided
+                if(forceBrowserAuth)
+                {
+                    return new InteractiveBrowserCredential();
+                }
+                else
+                {
                 return new DefaultAzureCredential();
+                }
             }
             else
             {
