@@ -340,15 +340,15 @@ namespace MirrorLakeKustoTest
             string? creationTime,
             string? goBack)
         {
-            var ingestionConnectionString = GetQueryConnectionString();
+            var queryConnectionString = GetQueryConnectionString();
             var args = new[]
             {
                 "-s",
                 deltaTableStorageUrl,
                 "-c",
                 checkpointFolderUrl,
-                "-i",
-                ingestionConnectionString,
+                "-k",
+                queryConnectionString,
                 "-d",
                 database,
                 "-t",
