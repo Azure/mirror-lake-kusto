@@ -28,15 +28,15 @@ namespace MirrorLakeKusto.Orchestrations
             CancellationToken ct)
         {
             var storageCredentials = CreateNonSasStorageCredentials(
-                parameters.ClusterIngestionConnectionString,
+                parameters.ClusterQueryConnectionString,
                 parameters.ForceBrowserAuth);
             var globalTableStatusTask = GlobalTableStatus.RetrieveAsync(
                 parameters.CheckpointBlobFolderUrl,
                 storageCredentials,
                 parameters.DeltaTableParameterizations.Select(d => d.KustoTable),
                 ct);
-            var clusterGateway = await KustoClusterGateway.CreateAsync(
-                parameters.ClusterIngestionConnectionString,
+            var clusterGateway = KustoClusterGateway.Create(
+                parameters.ClusterQueryConnectionString,
                 storageCredentials,
                 version,
                 requestDescription);

@@ -107,17 +107,5 @@ with(format='csv', ignoreFirstRecord=true)
         {
             return new KustoQueuedIngestionProperties(DatabaseName, tableName);
         }
-
-        public async Task QueueIngestionAsync(
-            Uri blobUrl,
-            KustoQueuedIngestionProperties ingestionProperties,
-            CancellationToken ct)
-        {
-            if (ingestionProperties.DatabaseName != DatabaseName)
-            {
-                throw new ArgumentException("Database name", nameof(ingestionProperties));
-            }
-            await _clusterGateway.IngestFromStorageAsync(blobUrl, ingestionProperties, ct);
-        }
     }
 }

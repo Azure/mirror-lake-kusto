@@ -17,7 +17,7 @@ namespace MirrorLakeKusto.Parameters
             bool forceBrowserAuth)
         {
             ContinuousRun = continuousRun;
-            ClusterIngestionConnectionString = clusterIngestionConnectionString;
+            ClusterQueryConnectionString = clusterIngestionConnectionString;
             CheckpointBlobFolderUrl = checkpointBlobFolderUrl;
             DeltaTableParameterizations = deltaTableParameterizations.ToImmutableArray();
             ForceBrowserAuth = forceBrowserAuth;
@@ -54,7 +54,7 @@ namespace MirrorLakeKusto.Parameters
 
             return new MainParameterization(
                 options.ContinuousRun,
-                options.ClusterIngestionConnectionString,
+                options.ClusterQueryConnectionString,
                 checkpointBlobFolderUrl,
                 new[] { deltaTable },
                 options.ForceBrowserAuth);
@@ -109,7 +109,7 @@ namespace MirrorLakeKusto.Parameters
 
         public bool ForceBrowserAuth { get; }
 
-        public string ClusterIngestionConnectionString { get; }
+        public string ClusterQueryConnectionString { get; }
 
         public Uri CheckpointBlobFolderUrl { get; }
 

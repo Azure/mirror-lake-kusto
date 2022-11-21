@@ -60,7 +60,7 @@ jobs:
     - name: Set environment variables
       shell:  bash
       run: |
-        echo "mlkIngestionUri=${{ secrets.mlkIngestionUri }}" >> $GITHUB_ENV
+        echo "mlkQueryUri=${{ secrets.mlkQueryUri }}" >> $GITHUB_ENV
         echo "mlkTenantId=${{ secrets.mlkTenantId }}" >> $GITHUB_ENV
         echo "mlkSpId=${{ secrets.mlkSpId }}" >> $GITHUB_ENV
         echo "mlkSpSecret=${{ secrets.mlkSpSecret }}" >> $GITHUB_ENV
