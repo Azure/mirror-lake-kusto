@@ -26,11 +26,11 @@ namespace MirrorLakeKusto
         public string DeltaTableStorageUrl { get; set; } = string.Empty;
 
         [Option(
-            'i',
+            'k',
             "ingestion",
             Required = false,
-            HelpText = "Cluster Ingestion Connection string (cf https://docs.microsoft.com/en-us/azure/data-explorer/kusto/api/connection-strings/kusto)")]
-        public string ClusterIngestionConnectionString { get; set; } = string.Empty;
+            HelpText = "Cluster Query Connection string (cf https://docs.microsoft.com/en-us/azure/data-explorer/kusto/api/connection-strings/kusto)")]
+        public string ClusterQueryConnectionString { get; set; } = string.Empty;
 
         [Option('d', "db", Required = false, HelpText = "Kusto Database")]
         public string Database { get; set; } = string.Empty;

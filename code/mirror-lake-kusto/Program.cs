@@ -145,7 +145,7 @@ namespace MirrorLakeKusto
 
         private static bool ValidateCommandLineOptions(CommandLineOptions options)
         {
-            if (string.IsNullOrWhiteSpace(options.ClusterIngestionConnectionString))
+            if (string.IsNullOrWhiteSpace(options.ClusterQueryConnectionString))
             {
                 Console.WriteLine("Missing cluster ingestion connection string");
 

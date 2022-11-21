@@ -21,48 +21,35 @@ namespace MirrorLakeKusto.Kusto
 
         private readonly ICslQueryProvider _queryProvider;
         private readonly ICslAdminProvider _commandProvider;
-        private readonly IKustoQueuedIngestClient _ingestionProvider;
         private readonly string _application;
         private readonly IImmutableList<KeyValuePair<string, object>>? _requestOptions;
 
         #region Constructors
-        public static async Task<KustoClusterGateway> CreateAsync(
-            string clusterIngestionConnectionString,
+        public static KustoClusterGateway Create(
+            string clusterQueryConnectionString,
             TokenCredential credentials,
             string version,
             string? requestDescription = null)
         {
-            var ingestionStringBuilder =
-                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
             var queryStringBuilder =
-                new KustoConnectionStringBuilder(clusterIngestionConnectionString);
+                new KustoConnectionStringBuilder(clusterQueryConnectionString);
 
-            ingestionStringBuilder =
-                ingestionStringBuilder.WithAadAzureTokenCredentialsAuthentication(credentials);
             queryStringBuilder =
                 queryStringBuilder.WithAadAzureTokenCredentialsAuthentication(credentials);
 
-            var clusterQueryUri = await GetQueryUriAsync(ingestionStringBuilder);
-
-            queryStringBuilder.DataSource = clusterQueryUri.ToString();
-
             return new KustoClusterGateway(
-                ingestionStringBuilder,
                 queryStringBuilder,
                 version,
                 requestDescription);
         }
 
         private KustoClusterGateway(
-            KustoConnectionStringBuilder ingestionStringBuilder,
             KustoConnectionStringBuilder queryStringBuilder,
             string version,
             string? requestDescription = null)
         {
             _queryProvider = KustoClientFactory.CreateCslQueryProvider(queryStringBuilder);
-            _commandProvider = KustoClientFactory.CreateCslCmAdminProvider(queryStringBuilder);
-            _ingestionProvider = KustoIngestFactory.CreateQueuedIngestClient(
-                ingestionStringBuilder);
+            _commandProvider = KustoClientFactory.CreateCslAdminProvider(queryStringBuilder);
             if (requestDescription != null)
             {
                 _application = $"Kusto-Mirror;{version}";
@@ -88,28 +75,6 @@ namespace MirrorLakeKusto.Kusto
                 ct);
 
             return results.First();
-        }
-
-        internal async Task IngestFromStorageAsync(
-            Uri blobUrl,
-            KustoQueuedIngestionProperties properties,
-            CancellationToken ct)
-        {
-            var ingestionBlobUrl = $"{blobUrl};managed_identity=system";
-            var result = await _ingestionProvider.IngestFromStorageAsync(
-                ingestionBlobUrl,
-                properties,
-                //  Recommended so the DM sizes the file properly
-                new StorageSourceOptions { Size = 0 });
-            var failureStatus = result.GetIngestionStatusCollection().First();
-
-            if (failureStatus.Status != Status.Queued)
-            {
-                throw new MirrorException(
-                    $"Blob '{blobUrl}' hasn't queued ; state '{failureStatus.Status}', "
-                    + $"failure status '{failureStatus.FailureStatus}' & "
-                    + $"error code '{failureStatus.ErrorCode}'");
-            }
         }
 
         public async Task<IImmutableList<T>> ExecuteQueryAsync<T>(
@@ -207,27 +172,6 @@ namespace MirrorLakeKusto.Kusto
                 throw new MirrorException(
                     $"Issue running the command '{commandText}' on database '{database}'",
                     ex);
-            }
-        }
-
-        private static async Task<Uri> GetQueryUriAsync(
-            KustoConnectionStringBuilder ingestionStringBuilder)
-        {
-            try
-            {
-                var dmCommandProvider =
-                    KustoClientFactory.CreateCslCmAdminProvider(ingestionStringBuilder);
-                var dataReader = await dmCommandProvider.ExecuteControlCommandAsync(
-                    "",
-                    ".show query service uri");
-                var clusterQueryUrl = Project(dataReader, r => r.GetString(0)).First();
-                var clusterQueryUri = new Uri(clusterQueryUrl);
-
-                return clusterQueryUri;
-            }
-            catch (Exception ex)
-            {
-                throw new MirrorException("Error retrieving the cluster query uri", ex);
             }
         }
 

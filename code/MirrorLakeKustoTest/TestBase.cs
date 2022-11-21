@@ -234,7 +234,7 @@ namespace MirrorLakeKustoTest
         private static readonly TimeSpan PROCESS_TIMEOUT = TimeSpan.FromMinutes(5);
 
         private readonly static string? _singleExecPath;
-        private readonly static Uri _ingestionUri;
+        private readonly static Uri _queryUri;
         private readonly static SparkSessionClient _sparkSessionClient;
         private readonly static Task<SparkSession> _sparkSessionTask;
         private readonly static ConcurrentQueue<TaskCompletionSource> _sparkSessionQueue =
@@ -250,7 +250,7 @@ namespace MirrorLakeKustoTest
 
             ReadEnvironmentVariables();
             _singleExecPath = Environment.GetEnvironmentVariable("mlkSingleExecPath");
-            _ingestionUri = new Uri(GetEnvironmentVariable("mlkIngestionUri"));
+            _queryUri = new Uri(GetEnvironmentVariable("mlkQueryUri"));
             _testSetId = $"{now.ToString("yyyy-MM-dd")}/{now.ToString("HH:mm:ss")}";
             _sparkSessionClient = CreateSparkSessionClient();
             _dbManagementTask = CreateDbManagementAsync();
@@ -340,7 +340,7 @@ namespace MirrorLakeKustoTest
             string? creationTime,
             string? goBack)
         {
-            var ingestionConnectionString = GetIngestionConnectionString();
+            var ingestionConnectionString = GetQueryConnectionString();
             var args = new[]
             {
                 "-s",
@@ -429,15 +429,16 @@ namespace MirrorLakeKustoTest
             }
         }
 
-        private static string GetIngestionConnectionString()
+        private static string GetQueryConnectionString()
         {
             var tenantId = GetEnvironmentVariable("mlkTenantId");
             var appId = GetEnvironmentVariable("mlkSpId");
             var appSecret = GetEnvironmentVariable("mlkSpSecret");
-            var ingestionConnectionString = $"Data Source={_ingestionUri};Fed=true;"
+            var queryConnectionString = $"Data Source={_queryUri};Fed=true;"
                 + $"Application Client Id={appId};Application Key={appSecret};"
                 + $"Authority Id={tenantId}";
-            return ingestionConnectionString;
+
+            return queryConnectionString;
         }
         #endregion
 
@@ -656,7 +657,7 @@ namespace MirrorLakeKustoTest
             var resourceGroup = GetEnvironmentVariable("mlkResourceGroup");
             var clusterName = GetEnvironmentVariable("mlkCluster");
             var dbPrefix = GetEnvironmentVariable("mlkDbPrefix");
-            var ingestionConnectionString = GetIngestionConnectionString();
+            var queryConnectionString = GetQueryConnectionString();
             var credential = new ClientCredential(appId, appSecret);
             var authenticationContext = new AuthenticationContext($"https://login.windows.net/{tenantId}");
             var result = await authenticationContext.AcquireTokenAsync(
@@ -677,8 +678,8 @@ namespace MirrorLakeKustoTest
             var clusterTask = kustoManagementClient.Clusters.GetAsync(resourceGroup, clusterName);
             var cluster = await clusterTask;
             var dbCreationTaskQueue = new ConcurrentQueue<Task<string>>();
-            var clusterGateway = await KustoClusterGateway.CreateAsync(
-                ingestionConnectionString,
+            var clusterGateway = KustoClusterGateway.Create(
+                queryConnectionString,
                 new ClientSecretCredential(tenantId, appId, appSecret),
                 string.Empty);
 
