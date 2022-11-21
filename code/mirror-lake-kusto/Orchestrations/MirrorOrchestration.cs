@@ -89,13 +89,13 @@ namespace MirrorLakeKusto.Orchestrations
         {
             if (Uri.TryCreate(clusterIngestionConnectionString, UriKind.Absolute, out _))
             {   //  Default, if no credentials are provided
-                if(forceBrowserAuth)
+                if (forceBrowserAuth)
                 {
                     return new InteractiveBrowserCredential();
                 }
                 else
                 {
-                return new DefaultAzureCredential();
+                    return new DefaultAzureCredential();
                 }
             }
             else
